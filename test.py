@@ -937,7 +937,7 @@ def show_financial_impact(data):
     # Format for display
     display_segment = segment_revenue.copy()
     for col in ['Total_LTV', 'Avg_LTV', 'Monthly_Revenue']:
-        display_segment[col] = ' + display_segment[col].astype(str)
+        display_segment[col] = '$' + display_segment[col].astype(str)
     
     st.dataframe(display_segment, use_container_width=True)
 
