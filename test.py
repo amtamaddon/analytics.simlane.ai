@@ -455,20 +455,7 @@ def create_risk_dashboard(data):
     
     return fig_risk, fig_timeline
 
-def show_customer_segments(data, cluster_summary):
-    """Customer segments analysis page."""
-    create_professional_header(
-        "Customer Segments", 
-        "Deep dive into customer segmentation and behavioral patterns"
-    )
-    
-    # Cluster summary table
-    st.subheader("📊 Segment Overview")
-    
-    # Format the summary for display
-    display_summary = cluster_summary.copy()
-    display_summary['Churn_Rate'] = (display_summary['Churn_Rate'] * 100).round(1).astype(str) + '%'
-    display_summary['Avg_Premium'] = '$' + display_summary['Avg_Premium'].round(0).astype(str)    
+def show_executive_dashboard(data, cluster_summary):
     """Executive dashboard view."""
     create_professional_header(
         "Executive Dashboard", 
@@ -545,6 +532,302 @@ def show_customer_segments(data, cluster_summary):
             }
         )
         st.plotly_chart(fig_risk, use_container_width=True)
+    
+    # Additional insights
+    st.markdown("### 📈 Key Insights")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown(create_alert_box(
+            f"There are {len(data[data['risk_category'] == 'IMMEDIATE'])} members at immediate risk of churning in the next 30 days.",
+            "danger"
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        avg_ltv = data['lifetime_value'].mean()
+        st.markdown(create_alert_box(
+            f"Average customer lifetime value is ${avg_ltv:,.2f}, up 15% from last quarter.",
+            "success"
+        ), unsafe_allow_html=True)
+
+def show_customer_segments(data, cluster_summary):
+    """Customer segments analysis page."""
+    create_professional_header(
+        "Customer Segments", 
+        "Deep dive into customer segmentation and behavioral patterns"
+    )
+    
+    # Cluster summary table
+    st.subheader("📊 Segment Overview")
+    
+    # Format the summary for display
+    display_summary = cluster_summary.copy()
+    display_summary['Churn_Rate'] = (display_summary['Churn_Rate'] * 100).round(1).astype(str) + '%'
+    display_summary['Avg_Premium'] = '$' + display_summary['Avg_Premium'].round(0).astype(str)
+    display_summary['Avg_LTV'] = '$' + display_summary['Avg_LTV'].round(0).astype(str)
+    
+    st.dataframe(display_summary, use_container_width=True)
+    
+    # Visualizations
+    fig_pie, fig_churn, fig_scatter = create_cluster_visualization(data, cluster_summary)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_pie, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig_churn, use_container_width=True)
+    
+    st.plotly_chart(fig_scatter, use_container_width=True)
+    
+    # Segment insights
+    st.subheader("🔍 Segment Insights")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        highest_value_cluster = cluster_summary['Avg_LTV'].idxmax()
+        st.markdown(create_alert_box(
+            f"Cluster {highest_value_cluster} has the highest average lifetime value at ${cluster_summary.loc[highest_value_cluster, 'Avg_LTV']:,.0f}",
+            "success"
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        highest_churn_cluster = cluster_summary['Churn_Rate'].idxmax()
+        st.markdown(create_alert_box(
+            f"Cluster {highest_churn_cluster} has the highest churn rate at {cluster_summary.loc[highest_churn_cluster, 'Churn_Rate']*100:.1f}%",
+            "warning"
+        ), unsafe_allow_html=True)
+
+def show_churn_predictions(data):
+    """Churn predictions page."""
+    create_professional_header(
+        "Churn Predictions", 
+        "AI-powered member retention insights and risk analysis"
+    )
+    
+    # Risk metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    immediate_risk = len(data[data['risk_category'] == 'IMMEDIATE'])
+    high_risk = len(data[data['risk_category'] == 'HIGH'])
+    medium_risk = len(data[data['risk_category'] == 'MEDIUM'])
+    low_risk = len(data[data['risk_category'] == 'LOW'])
+    
+    with col1:
+        st.markdown(create_metric_card(
+            "Immediate Risk", 
+            f"{immediate_risk}", 
+            "Next 30 days",
+            "🚨"
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(create_metric_card(
+            "High Risk", 
+            f"{high_risk}", 
+            "30-90 days",
+            "⚠️"
+        ), unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(create_metric_card(
+            "Medium Risk", 
+            f"{medium_risk}", 
+            "90-180 days",
+            "📊"
+        ), unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(create_metric_card(
+            "Low Risk", 
+            f"{low_risk}", 
+            ">180 days",
+            "✅"
+        ), unsafe_allow_html=True)
+    
+    # Risk visualization
+    fig_risk, fig_timeline = create_risk_dashboard(data)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_risk, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    # High-risk members table
+    st.subheader("🎯 High-Priority Members")
+    
+    high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
+    
+    display_columns = ['member_id', 'group_id', 'risk_category', 'estimated_days_to_churn', 
+                      'tenure_days', 'virtual_care_visits', 'lifetime_value']
+    
+    st.dataframe(
+        high_risk_members[display_columns].head(20),
+        use_container_width=True,
+        height=400
+    )
+    
+    # Download option
+    csv = high_risk_members.to_csv(index=False)
+    st.download_button(
+        label="📥 Download High-Risk Members List",
+        data=csv,
+        file_name=f"high_risk_members_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime='text/csv'
+    )
+
+def show_financial_impact(data):
+    """Financial impact analysis page."""
+    create_professional_header(
+        "Financial Impact", 
+        "Revenue analysis and retention opportunity assessment"
+    )
+    
+    # Financial metrics
+    total_revenue = data['monthly_premium'].sum()
+    revenue_at_risk = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]['monthly_premium'].sum()
+    avg_premium = data['monthly_premium'].mean()
+    total_ltv = data['lifetime_value'].sum()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(create_metric_card(
+            "Monthly Revenue", 
+            f"${total_revenue:,.0f}", 
+            "↑ 8% MoM",
+            "💰"
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(create_metric_card(
+            "Revenue at Risk", 
+            f"${revenue_at_risk:,.0f}", 
+            f"{revenue_at_risk/total_revenue:.1%} of total",
+            "⚠️"
+        ), unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(create_metric_card(
+            "Avg Premium", 
+            f"${avg_premium:.2f}", 
+            "↑ $5.20 YoY",
+            "📈"
+        ), unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(create_metric_card(
+            "Total LTV", 
+            f"${total_ltv/1000:.1f}K", 
+            "↑ 12% QoQ",
+            "🎯"
+        ), unsafe_allow_html=True)
+    
+    # Revenue by segment
+    st.subheader("💼 Revenue by Segment")
+    
+    segment_revenue = data.groupby('cluster').agg({
+        'monthly_premium': 'sum',
+        'lifetime_value': 'sum',
+        'member_id': 'count'
+    }).round(0)
+    
+    fig_revenue = px.bar(
+        x=segment_revenue.index,
+        y=segment_revenue['monthly_premium'],
+        title="Monthly Revenue by Customer Segment",
+        labels={'x': 'Segment', 'y': 'Monthly Revenue ($)'},
+        color_discrete_sequence=['#0066CC']
+    )
+    
+    st.plotly_chart(fig_revenue, use_container_width=True)
+    
+    # Location and industry breakdown
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        location_revenue = data.groupby('location')['monthly_premium'].sum().sort_values(ascending=False)
+        fig_location = px.bar(
+            x=location_revenue.index,
+            y=location_revenue.values,
+            title="Revenue by Location",
+            color_discrete_sequence=['#00B8A3']
+        )
+        st.plotly_chart(fig_location, use_container_width=True)
+    
+    with col2:
+        industry_revenue = data.groupby('industry')['monthly_premium'].sum().sort_values(ascending=False)
+        fig_industry = px.bar(
+            x=industry_revenue.index,
+            y=industry_revenue.values,
+            title="Revenue by Industry",
+            color_discrete_sequence=['#FF6B35']
+        )
+        st.plotly_chart(fig_industry, use_container_width=True)
+    
+    # Retention opportunity
+    st.subheader("🎯 Retention Opportunity")
+    
+    retention_opportunity = revenue_at_risk * 0.7  # Assume 70% can be saved
+    
+    st.markdown(create_alert_box(
+        f"By implementing targeted retention strategies, we could save approximately ${retention_opportunity:,.0f} in monthly revenue.",
+        "success"
+    ), unsafe_allow_html=True)
+
+def show_settings():
+    """Settings page."""
+    create_professional_header(
+        "Settings", 
+        "Configure your dashboard preferences and account settings"
+    )
+    
+    st.subheader("👤 User Profile")
+    st.info(f"""
+    **Username:** {st.session_state.username}  
+    **Role:** {st.session_state.user['role'].title()}  
+    **Name:** {st.session_state.user['name']}
+    """)
+    
+    st.subheader("🎨 Dashboard Preferences")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        theme = st.selectbox("Color Theme", ["Default Blue", "Dark Mode", "Light Mode"])
+        date_format = st.selectbox("Date Format", ["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"])
+    
+    with col2:
+        currency = st.selectbox("Currency", ["USD ($)", "EUR (€)", "GBP (£)"])
+        timezone = st.selectbox("Timezone", ["EST", "PST", "CST", "UTC"])
+    
+    st.subheader("📊 Data Settings")
+    
+    auto_refresh = st.checkbox("Enable Auto-Refresh", value=True)
+    if auto_refresh:
+        refresh_interval = st.slider("Refresh Interval (minutes)", 5, 60, 15)
+    
+    export_format = st.radio("Default Export Format", ["CSV", "Excel", "JSON"])
+    
+    st.subheader("🔔 Notifications")
+    
+    email_alerts = st.checkbox("Email Alerts", value=True)
+    sms_alerts = st.checkbox("SMS Alerts", value=False)
+    
+    if email_alerts:
+        alert_threshold = st.select_slider(
+            "Alert when churn risk exceeds:",
+            options=["LOW", "MEDIUM", "HIGH", "IMMEDIATE"],
+            value="HIGH"
+        )
+    
+    # Save button
+    if st.button("💾 Save Settings", type="primary", use_container_width=True):
+        st.success("✅ Settings saved successfully!")
+        time.sleep(1)
+        st.rerun()
 
 # ============================================================================
 # MAIN APPLICATION
