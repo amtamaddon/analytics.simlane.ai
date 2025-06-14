@@ -202,19 +202,27 @@ class SMSManager:
         # Try to initialize Twilio client if credentials are available
         if TWILIO_AVAILABLE:
             try:
-                # Check for Twilio credentials in Streamlit secrets
+                # IMPORTANT: Replace these with your actual Twilio credentials
+                # For production, use environment variables or Streamlit secrets
+                # These are placeholder values - get real ones from your Twilio console
+                account_sid = "SK39d6808bf645f5c2588faa74cb48c3fd"  # Your Account SID from twilio.com/console
+                auth_token = "rh0cuRyyCztVX4tMEZyhfdfjlyqWcolh"  # Your Auth Token from twilio.com/console
+                self.from_number = "+15551234567"  # Your Twilio phone number
+                
+                # Check for Twilio credentials in Streamlit secrets (preferred method)
                 if 'twilio' in st.secrets:
                     account_sid = st.secrets['twilio']['account_sid']
                     auth_token = st.secrets['twilio']['auth_token']
                     self.from_number = st.secrets['twilio'].get('from_number', '+1234567890')
-                    self.client = TwilioClient(account_sid, auth_token)
                 # Check environment variables as fallback
                 elif all(k in os.environ for k in ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN']):
-                    import os
                     account_sid = os.environ['TWILIO_ACCOUNT_SID']
                     auth_token = os.environ['TWILIO_AUTH_TOKEN']
                     self.from_number = os.environ.get('TWILIO_FROM_NUMBER', '+1234567890')
-                    self.client = TwilioClient(account_sid, auth_token)
+                
+                # Initialize the client
+                self.client = TwilioClient(account_sid, auth_token)
+                
             except Exception as e:
                 st.error(f"Failed to initialize Twilio: {str(e)}")
     
