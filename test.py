@@ -1058,7 +1058,7 @@ def show_financial_impact(data):
     # Format for display
     display_segment = segment_revenue.copy()
     for col in ['Total_LTV', 'Avg_LTV', 'Monthly_Revenue']:
-        display_segment[col] = '
+        display_segment[col] = '$' + display_segment[col].astype(str)
     """Executive dashboard view."""
     create_professional_header(
         "Executive Dashboard", 
