@@ -373,14 +373,6 @@ def show_login_page():
         **Admin User:**
         - Username: `admin`
         - Password: `simlane2025`
-        
-        **Analyst User:**
-        - Username: `analyst` 
-        - Password: `analyst123`
-        
-        **Executive User:**
-        - Username: `executive`
-        - Password: `executive456`
         """)
 
 def create_risk_dashboard(data):
