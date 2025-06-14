@@ -630,7 +630,7 @@ def main():
 
 if __name__ == "__main__":
     main() + display_summary['Avg_Premium'].round(0).astype(str)
-    display_summary['Avg_LTV'] = '
+    display_segment[col] = '$' + display_segment[col].astype(str)
     """Executive dashboard view."""
     create_professional_header(
         "Executive Dashboard", 
