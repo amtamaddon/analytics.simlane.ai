@@ -23,3 +23,5 @@ scipy>=1.11.4
 # Additional utilities
 python-dateutil>=2.8.2
 pytz>=2023.3
+
+twilio==8.11.0
