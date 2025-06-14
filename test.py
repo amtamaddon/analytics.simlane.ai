@@ -630,21 +630,7 @@ def main():
 # ============================================================================
 
 if __name__ == "__main__":
-    main() + display_summary['Avg_Premium'].round(0).astype(str)
-    display_segment[col] = '$' + display_segment[col].astype(str)
-    """Executive dashboard view."""
-    create_professional_header(
-        "Executive Dashboard", 
-        "High-level business metrics and key performance indicators"
-    )
-    
-    # Key metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    
-    total_members = len(data)
-    active_members = len(data[data['status'] == 'active'])
-    churn_rate = (data['status'] == 'cancelled').mean()
-    revenue_at_risk = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]['lifetime_value'].sum()
+    main()
     
     with col1:
         st.markdown(create_metric_card(
