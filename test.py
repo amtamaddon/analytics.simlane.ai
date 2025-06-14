@@ -205,23 +205,26 @@ class SMSManager:
                 # IMPORTANT: Replace these with your actual Twilio credentials
                 # For production, use environment variables or Streamlit secrets
                 # These are placeholder values - get real ones from your Twilio console
-                account_sid = "SK39d6808bf645f5c2588faa74cb48c3fd"  # Your Account SID from twilio.com/console
-                auth_token = "rh0cuRyyCztVX4tMEZyhfdfjlyqWcolh"  # Your Auth Token from twilio.com/console
-                self.from_number = "+15551234567"  # Your Twilio phone number
+                account_sid = "rh0cuRyyCztVX4tMEZyhfdfjlyqWcolh"  # Your Account SID from twilio.com/console
+                auth_token = "your-auth-token-here"  # Your Auth Token from twilio.com/console
+                self.from_number = "+18333653964"  # Your Twilio phone number (must be a valid Twilio number)
                 
                 # Check for Twilio credentials in Streamlit secrets (preferred method)
                 if 'twilio' in st.secrets:
                     account_sid = st.secrets['twilio']['account_sid']
                     auth_token = st.secrets['twilio']['auth_token']
-                    self.from_number = st.secrets['twilio'].get('from_number', '+1234567890')
+                    self.from_number = st.secrets['twilio'].get('from_number', self.from_number)
                 # Check environment variables as fallback
                 elif all(k in os.environ for k in ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN']):
                     account_sid = os.environ['TWILIO_ACCOUNT_SID']
                     auth_token = os.environ['TWILIO_AUTH_TOKEN']
-                    self.from_number = os.environ.get('TWILIO_FROM_NUMBER', '+1234567890')
+                    self.from_number = os.environ.get('TWILIO_FROM_NUMBER', self.from_number)
                 
-                # Initialize the client
-                self.client = TwilioClient(account_sid, auth_token)
+                # Initialize the client only if we have real credentials
+                if not account_sid.startswith("AC") or account_sid == "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx":
+                    st.warning("⚠️ Twilio credentials not configured. Please add your Twilio Account SID and Auth Token.")
+                else:
+                    self.client = TwilioClient(account_sid, auth_token)
                 
             except Exception as e:
                 st.error(f"Failed to initialize Twilio: {str(e)}")
@@ -231,15 +234,30 @@ class SMSManager:
         if not self.client:
             return False, "Twilio client not initialized. Please configure credentials."
         
+        if not self.from_number or self.from_number == "+1234567890":
+            return False, "No valid Twilio phone number configured. Please set up a Twilio phone number."
+        
         try:
-            message = self.client.messages.create(
+            # Clean the phone number format
+            to_number = to_number.strip()
+            if not to_number.startswith('+'):
+                # Assume US number if no country code
+                to_number = '+1' + to_number.replace('-', '').replace(' ', '').replace('(', '').replace(')', '')
+            
+            message_obj = self.client.messages.create(
                 body=message,
                 from_=self.from_number,
                 to=to_number
             )
-            return True, f"Message sent successfully! SID: {message.sid}"
+            return True, f"Message sent successfully! SID: {message_obj.sid}"
         except Exception as e:
-            return False, f"Failed to send SMS: {str(e)}"
+            error_msg = str(e)
+            if "not a valid phone number" in error_msg:
+                return False, f"Invalid phone number format. Please use format: +1234567890"
+            elif "From" in error_msg and "is not a Twilio phone number" in error_msg:
+                return False, f"Configuration error: {self.from_number} is not a valid Twilio phone number. Please get a phone number from your Twilio console."
+            else:
+                return False, f"Failed to send SMS: {error_msg}"
     
     def send_risk_alert(self, phone_number, member_id, risk_level, days_to_churn):
         """Send a risk alert SMS for a specific member."""
@@ -772,23 +790,40 @@ def show_settings():
                                             st.markdown("""
                                             **To configure Twilio:**
                                             
-                                            1. Create a `.streamlit/secrets.toml` file:
+                                            **You need THREE things from Twilio:**
+                                            
+                                            1. **Account SID** - Starts with 'AC' (not 'SK')
+                                            2. **Auth Token** - Your account auth token (not API key)
+                                            3. **Twilio Phone Number** - A phone number you've purchased from Twilio
+                                            
+                                            **Setup Methods:**
+                                            
+                                            **Option 1: Create `.streamlit/secrets.toml`:**
                                             ```toml
                                             [twilio]
-                                            account_sid = "your-account-sid"
-                                            auth_token = "your-auth-token"
-                                            from_number = "+1234567890"
+                                            account_sid = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                            auth_token = "your-auth-token-here"
+                                            from_number = "+1234567890"  # Your Twilio phone number
                                             ```
                                             
-                                            2. Or set environment variables:
+                                            **Option 2: Set environment variables:**
                                             ```bash
-                                            export TWILIO_ACCOUNT_SID="your-sid"
+                                            export TWILIO_ACCOUNT_SID="ACxxxxxx"
                                             export TWILIO_AUTH_TOKEN="your-token"
                                             export TWILIO_FROM_NUMBER="+1234567890"
                                             ```
                                             
-                                            3. Get your credentials from [Twilio Console](https://console.twilio.com)
+                                            **Get these from:**
+                                            1. [Twilio Console](https://console.twilio.com) - Account SID & Auth Token
+                                            2. [Phone Numbers](https://console.twilio.com/phone-numbers) - Buy a number
+                                            
+                                            **Common Issues:**
+                                            - Using API Key (SKxxxx) instead of Account SID (ACxxxx)
+                                            - Not having a Twilio phone number
+                                            - Using personal number instead of Twilio number for 'from'
                                             """)
+                                            
+                                            st.error("The 'from' number must be a Twilio phone number you've purchased, not your personal number!")
                         else:
                             st.warning("Please enter a phone number first.")
             else:
