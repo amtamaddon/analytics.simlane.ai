@@ -373,6 +373,14 @@ def show_login_page():
         **Admin User:**
         - Username: `admin`
         - Password: `simlane2025`
+        
+        **Analyst User:**
+        - Username: `analyst` 
+        - Password: `analyst123`
+        
+        **Executive User:**
+        - Username: `executive`
+        - Password: `executive456`
         """)
 
 def create_risk_dashboard(data):
@@ -544,54 +552,132 @@ def show_customer_segments(data, cluster_summary):
 def show_settings():
     """Settings page."""
     create_professional_header(
-        "Settings", 
-        "Configure your dashboard preferences and account settings"
+        "Settings & Configuration", 
+        "System settings, data management, and user preferences"
     )
     
-    st.subheader("👤 User Profile")
-    st.info(f"""
-    **Username:** {st.session_state.username}  
-    **Role:** {st.session_state.user['role'].title()}  
-    **Name:** {st.session_state.user['name']}
-    """)
+    tab1, tab2, tab3 = st.tabs(["📊 Data Management", "👤 User Settings", "🔧 System Config"])
     
-    st.subheader("🎨 Dashboard Preferences")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        theme = st.selectbox("Color Theme", ["Default Blue", "Dark Mode", "Light Mode"])
-        date_format = st.selectbox("Date Format", ["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD"])
-    
-    with col2:
-        currency = st.selectbox("Currency", ["USD ($)", "EUR (€)", "GBP (£)"])
-        timezone = st.selectbox("Timezone", ["EST", "PST", "CST", "UTC"])
-    
-    st.subheader("📊 Data Settings")
-    
-    auto_refresh = st.checkbox("Enable Auto-Refresh", value=True)
-    if auto_refresh:
-        refresh_interval = st.slider("Refresh Interval (minutes)", 5, 60, 15)
-    
-    export_format = st.radio("Default Export Format", ["CSV", "Excel", "JSON"])
-    
-    st.subheader("🔔 Notifications")
-    
-    email_alerts = st.checkbox("Email Alerts", value=True)
-    sms_alerts = st.checkbox("SMS Alerts", value=False)
-    
-    if email_alerts:
-        alert_threshold = st.select_slider(
-            "Alert when churn risk exceeds:",
-            options=["LOW", "MEDIUM", "HIGH", "IMMEDIATE"],
-            value="HIGH"
+    with tab1:
+        st.subheader("📥 Data Upload")
+        
+        uploaded_file = st.file_uploader(
+            "Upload new member data (CSV format)",
+            type=['csv'],
+            help="Upload a CSV file with member data to update the analytics"
         )
+        
+        if uploaded_file is not None:
+            try:
+                new_data = pd.read_csv(uploaded_file)
+                st.success(f"✅ Successfully uploaded {len(new_data)} records")
+                st.dataframe(new_data.head(), use_container_width=True)
+                
+                if st.button("🔄 Process Data"):
+                    st.success("✅ Data processed successfully! Dashboard will update automatically.")
+                    
+            except Exception as e:
+                st.error(f"❌ Error processing file: {str(e)}")
+        
+        st.subheader("🗂️ Data Export")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📊 Export Full Dataset", use_container_width=True):
+                data = load_sample_data()
+                csv = data.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv,
+                    file_name=f"member_data_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+        
+        with col2:
+            if st.button("📈 Export Analytics Report", use_container_width=True):
+                st.info("📊 Generating comprehensive analytics report...")
     
-    # Save button
-    if st.button("💾 Save Settings", type="primary", use_container_width=True):
-        st.success("✅ Settings saved successfully!")
-        time.sleep(1)
-        st.rerun()
+    with tab2:
+        st.subheader("👤 User Profile")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.text_input("Full Name", value=st.session_state.user['name'])
+            st.text_input("Email", value="user@simlane.ai", help="Primary contact email")
+            st.text_input("Phone Number", value="+1 (555) 123-4567", help="For SMS notifications")
+        
+        with col2:
+            st.selectbox("Role", options=['Admin', 'Analyst', 'Executive'], 
+                        index=0 if st.session_state.user['role'] == 'admin' else 1)
+            st.selectbox("Timezone", options=['EST', 'PST', 'CST', 'UTC'], index=0)
+            st.selectbox("Date Format", options=['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'], index=0)
+        
+        st.subheader("🔔 Notification Preferences")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            email_alerts = st.checkbox("Email Alerts", value=True)
+            if email_alerts:
+                alert_email = st.text_input("Alert Email", value="alerts@simlane.ai", 
+                                          help="Where to send email alerts")
+                email_frequency = st.selectbox("Email Frequency", 
+                                             options=["Immediate", "Daily Digest", "Weekly Summary"])
+        
+        with col2:
+            sms_alerts = st.checkbox("SMS Alerts", value=False)
+            if sms_alerts:
+                alert_phone = st.text_input("Alert Phone", value="+1 (555) 987-6543",
+                                          help="Where to send SMS alerts")
+                sms_threshold = st.select_slider(
+                    "SMS Alert Threshold",
+                    options=["LOW", "MEDIUM", "HIGH", "IMMEDIATE"],
+                    value="HIGH",
+                    help="Only send SMS for risks at or above this level"
+                )
+        
+        if email_alerts or sms_alerts:
+            st.multiselect(
+                "Alert Types",
+                options=["New High Risk Members", "Churn Rate Changes", "Segment Shifts", "System Issues"],
+                default=["New High Risk Members", "Churn Rate Changes"]
+            )
+        
+        if st.button("💾 Save User Settings", use_container_width=True):
+            st.success("✅ Settings saved successfully!")
+    
+    with tab3:
+        st.subheader("⚙️ System Configuration")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.number_input("Data Refresh Interval (hours)", value=24, min_value=1)
+            st.number_input("High Risk Alert Threshold (days)", value=30, min_value=1, max_value=90)
+            st.selectbox("Default Dashboard View", options=['Churn Predictions', 'Customer Segments'], index=0)
+        
+        with col2:
+            st.checkbox("Auto-generate Weekly Reports", value=True)
+            st.checkbox("Enable Advanced Analytics", value=True)
+            st.selectbox("Export Format", options=['CSV', 'Excel', 'JSON'], index=0)
+        
+        st.subheader("🎯 Risk Thresholds")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.number_input("Immediate Risk (days)", value=30, min_value=1, max_value=60)
+        with col2:
+            st.number_input("High Risk (days)", value=90, min_value=31, max_value=120)
+        with col3:
+            st.number_input("Medium Risk (days)", value=180, min_value=91, max_value=365)
+        with col4:
+            st.number_input("Low Risk (days)", value=365, min_value=181)
+        
+        if st.button("🔄 Apply Configuration", use_container_width=True):
+            st.success("✅ Configuration updated successfully!")
 
 # ============================================================================
 # MAIN APPLICATION
