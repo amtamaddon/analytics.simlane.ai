@@ -205,8 +205,8 @@ class SMSManager:
                 # IMPORTANT: Replace these with your actual Twilio credentials
                 # For production, use environment variables or Streamlit secrets
                 # These are placeholder values - get real ones from your Twilio console
-                account_sid = "rh0cuRyyCztVX4tMEZyhfdfjlyqWcolh"  # Your Account SID from twilio.com/console
-                auth_token = "your-auth-token-here"  # Your Auth Token from twilio.com/console
+                account_sid = "ACbbc3fe7ae9923ee89af7b7eabe790f2d"  # Your Account SID from twilio.com/console
+                auth_token = "ff99b41c2c6e9f18a51de3e4a6936f08"  # Your Auth Token from twilio.com/console
                 self.from_number = "+18333653964"  # Your Twilio phone number (must be a valid Twilio number)
                 
                 # Check for Twilio credentials in Streamlit secrets (preferred method)
