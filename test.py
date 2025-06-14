@@ -468,7 +468,7 @@ def show_customer_segments(data, cluster_summary):
     # Format the summary for display
     display_summary = cluster_summary.copy()
     display_summary['Churn_Rate'] = (display_summary['Churn_Rate'] * 100).round(1).astype(str) + '%'
-    display_summary['Avg_Premium'] = '$' + display_summary['Avg_Premium'].round(0).astype(str)
+    display_summary['Avg_Premium'] = '
     """Executive dashboard view."""
     create_professional_header(
         "Executive Dashboard", 
