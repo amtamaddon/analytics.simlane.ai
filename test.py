@@ -17,6 +17,16 @@ import io
 import time
 from pathlib import Path
 
+# Import Twilio (optional - will work without it)
+try:
+    from twilio.rest import Client as TwilioClient
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+
+# Import os for environment variables
+import os
+
 # ============================================================================
 # APP CONFIGURATION & STYLING
 # ============================================================================
@@ -179,6 +189,61 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ============================================================================
+# SMS NOTIFICATION SYSTEM
+# ============================================================================
+
+class SMSManager:
+    def __init__(self):
+        self.client = None
+        self.from_number = None
+        
+        # Try to initialize Twilio client if credentials are available
+        if TWILIO_AVAILABLE:
+            try:
+                # Check for Twilio credentials in Streamlit secrets
+                if 'twilio' in st.secrets:
+                    account_sid = st.secrets['twilio']['account_sid']
+                    auth_token = st.secrets['twilio']['auth_token']
+                    self.from_number = st.secrets['twilio'].get('from_number', '+1234567890')
+                    self.client = TwilioClient(account_sid, auth_token)
+                # Check environment variables as fallback
+                elif all(k in os.environ for k in ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN']):
+                    import os
+                    account_sid = os.environ['TWILIO_ACCOUNT_SID']
+                    auth_token = os.environ['TWILIO_AUTH_TOKEN']
+                    self.from_number = os.environ.get('TWILIO_FROM_NUMBER', '+1234567890')
+                    self.client = TwilioClient(account_sid, auth_token)
+            except Exception as e:
+                st.error(f"Failed to initialize Twilio: {str(e)}")
+    
+    def send_sms(self, to_number, message):
+        """Send an SMS message using Twilio."""
+        if not self.client:
+            return False, "Twilio client not initialized. Please configure credentials."
+        
+        try:
+            message = self.client.messages.create(
+                body=message,
+                from_=self.from_number,
+                to=to_number
+            )
+            return True, f"Message sent successfully! SID: {message.sid}"
+        except Exception as e:
+            return False, f"Failed to send SMS: {str(e)}"
+    
+    def send_risk_alert(self, phone_number, member_id, risk_level, days_to_churn):
+        """Send a risk alert SMS for a specific member."""
+        message = f"🚨 SIMLANE ALERT: Member {member_id} is at {risk_level} risk of churning in {days_to_churn} days. Take action now!"
+        return self.send_sms(phone_number, message)
+    
+    def send_test_message(self, phone_number):
+        """Send a test SMS message."""
+        message = "🎯 Simlane.ai Test Message: Your SMS notifications are working correctly!"
+        return self.send_sms(phone_number, message)
+
+sms_manager = SMSManager()
 
 # ============================================================================
 # AUTHENTICATION SYSTEM
@@ -471,10 +536,37 @@ def show_churn_predictions(data):
     with col2:
         st.plotly_chart(fig_timeline, use_container_width=True)
     
-    # High-risk members table
+    # High-risk members table with SMS alert option
     st.subheader("🎯 High-Priority Members")
     
     high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
+    
+    # Add SMS alert functionality if enabled
+    if 'sms_alerts_enabled' in st.session_state and st.session_state.sms_alerts_enabled:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.write("Members at immediate risk with SMS alert option")
+        with col2:
+            if st.button("📱 Send Bulk Alerts", use_container_width=True):
+                if 'alert_phone' in st.session_state:
+                    immediate_members = high_risk_members[high_risk_members['risk_category'] == 'IMMEDIATE'].head(5)
+                    with st.spinner("Sending SMS alerts..."):
+                        success_count = 0
+                        for _, member in immediate_members.iterrows():
+                            success, msg = sms_manager.send_risk_alert(
+                                st.session_state.alert_phone,
+                                member['member_id'],
+                                member['risk_category'],
+                                member['estimated_days_to_churn']
+                            )
+                            if success:
+                                success_count += 1
+                        if success_count > 0:
+                            st.success(f"✅ Sent {success_count} SMS alerts successfully!")
+                        else:
+                            st.error("Failed to send alerts. Check your Twilio configuration.")
+                else:
+                    st.warning("Please configure SMS settings first.")
     
     display_columns = ['member_id', 'group_id', 'risk_category', 'estimated_days_to_churn', 
                       'tenure_days', 'virtual_care_visits', 'lifetime_value']
@@ -637,6 +729,48 @@ def show_settings():
                     value="HIGH",
                     help="Only send SMS for risks at or above this level"
                 )
+                
+                # Store SMS settings in session state
+                st.session_state.sms_alerts_enabled = True
+                st.session_state.alert_phone = alert_phone
+                
+                # Test SMS button
+                if st.button("📱 Send Test SMS", use_container_width=True):
+                    if alert_phone:
+                        with st.spinner("Sending test message..."):
+                            success, message = sms_manager.send_test_message(alert_phone)
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+                                if not TWILIO_AVAILABLE:
+                                    st.info("💡 To enable SMS, install Twilio: `pip install twilio`")
+                                else:
+                                    with st.expander("🔧 Twilio Configuration Help"):
+                                        st.markdown("""
+                                        **To configure Twilio:**
+                                        
+                                        1. Create a `.streamlit/secrets.toml` file:
+                                        ```toml
+                                        [twilio]
+                                        account_sid = "your-account-sid"
+                                        auth_token = "your-auth-token"
+                                        from_number = "+1234567890"
+                                        ```
+                                        
+                                        2. Or set environment variables:
+                                        ```bash
+                                        export TWILIO_ACCOUNT_SID="your-sid"
+                                        export TWILIO_AUTH_TOKEN="your-token"
+                                        export TWILIO_FROM_NUMBER="+1234567890"
+                                        ```
+                                        
+                                        3. Get your credentials from [Twilio Console](https://console.twilio.com)
+                                        """)
+                    else:
+                        st.warning("Please enter a phone number first.")
+            else:
+                st.session_state.sms_alerts_enabled = False
         
         if email_alerts or sms_alerts:
             st.multiselect(
