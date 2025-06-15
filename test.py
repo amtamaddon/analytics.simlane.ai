@@ -60,14 +60,6 @@ RISK_COLORS = {
     'LOW': '#16A34A'         # Green - passes contrast
 }
 
-# Risk icons for accessibility
-RISK_ICONS = {
-    'IMMEDIATE': '🚨',
-    'HIGH': '⚠️',
-    'MEDIUM': '📊',
-    'LOW': '✅'
-}
-
 # Chart color sequences
 RISK_COLOR_SEQUENCE = ['#D92D20', '#F97316', '#3B82F6', '#16A34A']
 BRAND_COLORS = ['#2563EB', '#7C3AED', '#DB2777', '#DC2626', '#EA580C']
@@ -166,27 +158,6 @@ st.markdown("""
         }
     }
     
-    /* Auto-collapse sidebar at wide screens */
-    @media (min-width: 1600px) {
-        section[data-testid="stSidebar"] {
-            width: 5rem !important;
-            transition: width 0.3s ease;
-        }
-        
-        section[data-testid="stSidebar"]:hover {
-            width: 21rem !important;
-        }
-        
-        section[data-testid="stSidebar"] .css-1cypcdb {
-            font-size: 20px !important;
-        }
-    }
-    
-    /* Larger navigation icons */
-    section[data-testid="stSidebar"] .css-1cypcdb {
-        font-size: 20px;
-    }
-    
     /* Onboarding wizard styling */
     .onboarding-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -209,96 +180,6 @@ st.markdown("""
         margin-bottom: 0.5rem;
         font-weight: 600;
     }
-    
-    /* Numbered steps styling */
-    .step-indicator {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 2rem;
-        gap: 2rem;
-    }
-    
-    .step-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .step-number {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 14px;
-        transition: all 0.3s ease;
-    }
-    
-    .step-number.active {
-        background: #2563EB;
-        color: white;
-    }
-    
-    .step-number.completed {
-        background: #16A34A;
-        color: white;
-    }
-    
-    .step-number.inactive {
-        background: #e5e7eb;
-        color: #9ca3af;
-    }
-    
-    .step-label {
-        font-size: 0.875rem;
-        color: #64748b;
-    }
-    
-    .step-label.active {
-        color: #2563EB;
-        font-weight: 600;
-    }
-    
-    /* Skeleton loader */
-    .skeleton {
-        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-        background-size: 200% 100%;
-        animation: loading 1.5s infinite;
-        border-radius: 4px;
-        height: 20px;
-        margin: 0.5rem 0;
-    }
-    
-    @keyframes loading {
-        0% {
-            background-position: 200% 0;
-        }
-        100% {
-            background-position: -200% 0;
-        }
-    }
-    
-    /* Member row actions */
-    .member-actions {
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    }
-    
-    .member-row:hover .member-actions {
-        opacity: 1;
-    }
-    
-    /* Security badge */
-    .security-badge {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: #16A34A;
-        font-size: 0.875rem;
-        margin-top: 1rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -320,7 +201,7 @@ class SMSManager:
                 self.from_number = "+1..."  # Replace with your Twilio phone number
                 
                 # Check for Twilio credentials in Streamlit secrets (preferred method)
-                if hasattr(st, 'secrets') and 'twilio' in st.secrets:
+                if 'twilio' in st.secrets:
                     account_sid = st.secrets['twilio']['account_sid']
                     auth_token = st.secrets['twilio']['auth_token']
                     self.from_number = st.secrets['twilio'].get('from_number', self.from_number)
@@ -330,13 +211,28 @@ class SMSManager:
                     auth_token = os.environ['TWILIO_AUTH_TOKEN']
                     self.from_number = os.environ.get('TWILIO_FROM_NUMBER', self.from_number)
                 
-                # Only initialize if we have real credentials
-                if account_sid != "AC..." and auth_token != "...":
-                    self.client = TwilioClient(account_sid, auth_token)
-                    
+                # Check if using test credentials (for development)
+                # Test credentials will simulate SMS without actually sending
+                if account_sid == "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":
+                    st.warning("📋 Using Twilio Test Credentials - SMS will be simulated only")
+                    self.test_mode = True
+                else:
+                    self.test_mode = False
+                
+                # Initialize the client if we have valid credentials
+                if account_sid.startswith("AC") and len(account_sid) == 34 and auth_token != "...":
+                    try:
+                        self.client = TwilioClient(account_sid, auth_token)
+                        # Success - no need for constant banners
+                    except Exception as e:
+                        # Only show error if there's an actual problem
+                        pass
+                else:
+                    # Silently fail - user hasn't configured Twilio yet
+                    pass
+                
             except Exception as e:
-                # Silently fail - SMS features will be disabled
-                pass
+                st.error(f"Failed to initialize Twilio: {str(e)}")
     
     def send_sms(self, to_number, message):
         """Send an SMS message using Twilio."""
@@ -405,12 +301,7 @@ class SMSManager:
         
         return success, response
 
-# Create SMS manager instance - wrapped in try/except to prevent blocking
-try:
-    sms_manager = SMSManager()
-except Exception as e:
-    print(f"SMS Manager initialization error: {e}")
-    sms_manager = None
+sms_manager = SMSManager()
 
 # ============================================================================
 # AUTHENTICATION SYSTEM
@@ -424,8 +315,6 @@ def init_session_state():
         st.session_state.username = None
     if 'user' not in st.session_state:
         st.session_state.user = None
-    if 'last_login' not in st.session_state:
-        st.session_state.last_login = None
 
 def hash_password(password):
     """Hash a password for storing."""
@@ -475,19 +364,10 @@ def login_page():
                     st.session_state.authenticated = True
                     st.session_state.username = username
                     st.session_state.user = USERS_DB[username]
-                    st.session_state.last_login = datetime.now()
                     st.success("✅ Login successful!")
                     st.rerun()
                 else:
                     st.error("❌ Invalid username or password")
-        
-        # Security badge
-        st.markdown("""
-        <div class="security-badge">
-            <span>🔒</span>
-            <span>Bank-grade encryption protects your data</span>
-        </div>
-        """, unsafe_allow_html=True)
         
         st.markdown("""
         <div style="text-align: center; margin-top: 2rem; color: #94a3b8;">
@@ -607,20 +487,6 @@ def generate_sample_data(n_members=500):
 def load_sample_data():
     """Load sample data for the dashboard."""
     return generate_sample_data()
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
-def show_skeleton_loader(height=300):
-    """Show skeleton loader for lazy loading."""
-    st.markdown(f"""
-    <div style="padding: 1rem; background: white; border-radius: 8px; height: {height}px;">
-        <div class="skeleton" style="width: 60%; height: 24px;"></div>
-        <div class="skeleton" style="width: 40%; height: 16px; margin-top: 1rem;"></div>
-        <div class="skeleton" style="width: 100%; height: {height-80}px; margin-top: 1rem;"></div>
-    </div>
-    """, unsafe_allow_html=True)
 
 # ============================================================================
 # VISUALIZATION HELPERS
@@ -775,33 +641,6 @@ def create_segmentation_charts(data):
 # ONBOARDING WIZARD
 # ============================================================================
 
-def create_step_indicator(current_step, total_steps=4):
-    """Create numbered step indicator with accessibility."""
-    steps = ["Upload Data", "Map Fields", "Configure Alerts", "Tour"]
-    
-    html = '<div class="step-indicator" role="progressbar" aria-valuenow="' + str(current_step) + '" aria-valuemin="1" aria-valuemax="' + str(total_steps) + '">'
-    
-    for i, step_name in enumerate(steps, 1):
-        if i < current_step:
-            status = "completed"
-        elif i == current_step:
-            status = "active"
-        else:
-            status = "inactive"
-        
-        html += f'''
-        <div class="step-item">
-            <div class="step-number {status}" aria-label="Step {i} of {total_steps}: {step_name} - {status}">
-                {"✓" if status == "completed" else i}
-            </div>
-            <span class="step-label {status}">{step_name}</span>
-        </div>
-        '''
-    
-    html += '</div>'
-    
-    st.markdown(html, unsafe_allow_html=True)
-
 def create_onboarding_wizard():
     """Create an onboarding wizard for new users."""
     st.markdown("""
@@ -817,17 +656,8 @@ def create_onboarding_wizard():
     if 'onboarding_step' not in st.session_state:
         st.session_state.onboarding_step = 1
     
-    # Numbered steps instead of progress bar
-    create_step_indicator(st.session_state.onboarding_step)
-    
-    # Save & Finish Later link
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        if st.button("💾 Save & Finish Later", help="Your progress will be saved"):
-            st.session_state.show_onboarding = False
-            st.info("Progress saved! You can continue setup from Settings.")
-            time.sleep(2)
-            st.rerun()
+    progress = st.session_state.onboarding_step / 4
+    st.progress(progress)
     
     # Step 1: Upload Data
     if st.session_state.onboarding_step == 1:
@@ -845,8 +675,8 @@ def create_onboarding_wizard():
                 st.session_state.onboarding_step = 3  # Skip to alerts
                 with st.spinner("Loading demo data..."):
                     time.sleep(1)
-                st.warning("📊 Not live data → Connect real data in Settings")
-                time.sleep(2)
+                st.success("✅ Demo data loaded! Skipping to alert configuration.")
+                time.sleep(1)
                 st.rerun()
         
         with col2:
@@ -879,30 +709,7 @@ def create_onboarding_wizard():
                     st.rerun()
                     
             except Exception as e:
-                # Enhanced error message with missing columns
-                st.error(f"❌ Upload failed: {str(e)}")
-                
-                # List expected columns
-                expected_cols = ['member_id', 'group_id', 'enrollment_date', 'estimated_days_to_churn']
-                st.warning(f"**Missing required columns:** {', '.join(expected_cols)}")
-                
-                # Download template link
-                template_data = pd.DataFrame({
-                    'member_id': ['M0001', 'M0002'],
-                    'group_id': ['G1', 'G1'],
-                    'enrollment_date': ['2024-01-01', '2024-01-15'],
-                    'estimated_days_to_churn': [30, 90],
-                    'virtual_care_visits': [5, 2],
-                    'lifetime_value': [1500, 800]
-                })
-                
-                csv = template_data.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download Template",
-                    data=csv,
-                    file_name="simlane_template.csv",
-                    mime="text/csv"
-                )
+                st.error(f"Error reading file: {str(e)}")
     
     # Step 2: Map Fields
     elif st.session_state.onboarding_step == 2:
@@ -1089,7 +896,7 @@ def show_empty_state():
             st.session_state.show_onboarding = False
             with st.spinner("Loading demo data..."):
                 time.sleep(2)
-            st.warning("📊 Not live data → Connect real data in Settings")
+            st.success("✅ Demo data loaded successfully!")
             st.balloons()
             time.sleep(1)
             st.rerun()
@@ -1140,13 +947,10 @@ def show_member_details(member_id, data):
     
     with col1:
         risk_color = RISK_COLORS[member['risk_category']]
-        risk_icon = RISK_ICONS[member['risk_category']]
         st.markdown(f"""
         <div class="metric-card">
             <p class="metric-label">Risk Level</p>
-            <h2 class="metric-value" style="color: {risk_color};">
-                <span aria-label="{member['risk_category']} risk">{risk_icon} {member['risk_category']}</span>
-            </h2>
+            <h2 class="metric-value" style="color: {risk_color};">{member['risk_category']}</h2>
             <p class="metric-delta">{member['estimated_days_to_churn']} days to churn</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1241,6 +1045,32 @@ The Simlane Team"""
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Send Email", type="primary"):
+                    # In production, you would integrate with an email service like:
+                    # - SendGrid: pip install sendgrid
+                    # - AWS SES: pip install boto3
+                    # - SMTP: using Python's built-in smtplib
+                    
+                    # Example with generic SMTP (works with Gmail, Outlook, etc.):
+                    # import smtplib
+                    # from email.mime.text import MIMEText
+                    # from email.mime.multipart import MIMEMultipart
+                    # 
+                    # smtp_server = "smtp.gmail.com"
+                    # smtp_port = 587
+                    # sender_email = "your-email@gmail.com"
+                    # sender_password = "your-app-password"
+                    # 
+                    # msg = MIMEMultipart()
+                    # msg['From'] = sender_email
+                    # msg['To'] = email_to
+                    # msg['Subject'] = email_subject
+                    # msg.attach(MIMEText(email_content, 'plain'))
+                    # 
+                    # with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    #     server.starttls()
+                    #     server.login(sender_email, sender_password)
+                    #     server.send_message(msg)
+                    
                     st.success(f"📧 Email sent successfully to {email_to}!")
                     st.info("💡 In production, this would send a real email via your configured email service.")
                     st.session_state.show_email_composer = False
@@ -1251,36 +1081,32 @@ The Simlane Team"""
                     st.session_state.show_email_composer = False
                     st.rerun()
     
-    # Engagement Timeline with lazy loading
+    # Engagement Timeline with consistent colors
     st.subheader("📊 Engagement Timeline")
     
-    with st.spinner("Loading engagement data..."):
-        show_skeleton_loader(300)
-        time.sleep(0.5)  # Simulate loading
-        
-        # Generate sample engagement data
-        dates = pd.date_range(
-            start=member['enrollment_date'], 
-            end=datetime.now(), 
-            freq='M'
-        )
-        
-        engagement_data = pd.DataFrame({
-            'date': dates,
-            'virtual_visits': np.random.poisson(0.3, len(dates)),
-            'in_person_visits': np.random.poisson(0.2, len(dates))
-        })
-        
-        fig_timeline = px.line(
-            engagement_data,
-            x='date',
-            y=['virtual_visits', 'in_person_visits'],
-            title="Monthly Visit History",
-            labels={'value': 'Number of Visits', 'date': 'Month'},
-            color_discrete_map={'virtual_visits': BRAND_COLORS[0], 'in_person_visits': BRAND_COLORS[1]}
-        )
-        
-        st.plotly_chart(fig_timeline, use_container_width=True)
+    # Generate sample engagement data
+    dates = pd.date_range(
+        start=member['enrollment_date'], 
+        end=datetime.now(), 
+        freq='M'
+    )
+    
+    engagement_data = pd.DataFrame({
+        'date': dates,
+        'virtual_visits': np.random.poisson(0.3, len(dates)),
+        'in_person_visits': np.random.poisson(0.2, len(dates))
+    })
+    
+    fig_timeline = px.line(
+        engagement_data,
+        x='date',
+        y=['virtual_visits', 'in_person_visits'],
+        title="Monthly Visit History",
+        labels={'value': 'Number of Visits', 'date': 'Month'},
+        color_discrete_map={'virtual_visits': BRAND_COLORS[0], 'in_person_visits': BRAND_COLORS[1]}
+    )
+    
+    st.plotly_chart(fig_timeline, use_container_width=True)
     
     # Member Information
     col1, col2 = st.columns(2)
@@ -1362,24 +1188,18 @@ def show_dashboard(data):
             "🎯"
         ), unsafe_allow_html=True)
     
-    # Charts with lazy loading
+    # Charts
     st.subheader("📊 Risk Analysis Overview")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        with st.spinner("Loading risk distribution..."):
-            show_skeleton_loader(300)
-            time.sleep(0.5)
-            fig_risk, _ = create_risk_dashboard(data)
-            st.plotly_chart(fig_risk, use_container_width=True)
+        fig_risk, _ = create_risk_dashboard(data)
+        st.plotly_chart(fig_risk, use_container_width=True)
     
     with col2:
-        with st.spinner("Loading segments..."):
-            show_skeleton_loader(300)
-            time.sleep(0.5)
-            fig_segments, _ = create_segmentation_charts(data)
-            st.plotly_chart(fig_segments, use_container_width=True)
+        fig_segments, _ = create_segmentation_charts(data)
+        st.plotly_chart(fig_segments, use_container_width=True)
     
     # Recent alerts
     st.subheader("🔔 Recent Alerts")
@@ -1402,6 +1222,9 @@ def show_churn_predictions(data):
         "Churn Predictions", 
         "AI-powered member retention insights and risk analysis"
     )
+    
+    # Remove the test banner
+    # st.success("🚀 NEW FEATURES ACTIVE: Clickable cards, interactive tables, and more!")
     
     # Risk metrics - make them clickable
     col1, col2, col3, col4 = st.columns(4)
@@ -1473,11 +1296,6 @@ def show_churn_predictions(data):
     # Risk visualization with clickable elements
     fig_risk, fig_timeline = create_risk_dashboard(data)
     
-    # Get risk counts for click handling
-    risk_counts = data['risk_category'].value_counts()
-    risk_order = ['IMMEDIATE', 'HIGH', 'MEDIUM', 'LOW']
-    risk_counts = risk_counts.reindex(risk_order, fill_value=0)
-    
     # Add click event data to risk chart
     fig_risk.update_traces(
         customdata=risk_counts.index,
@@ -1513,8 +1331,848 @@ def show_churn_predictions(data):
     
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.write(f"**{immediate_count} members** projected to churn <30 days, **{high_count} members** at 30-90 days.")
+        st.write(f"**{immediate_count} members** projected to churn <30 days, **{high_count} members** at 30-90 days. Filter, email or export below.")
     with col2:
         # Bulk actions button
         if st.button("📋 Bulk Actions", use_container_width=True, type="primary"):
             st.session_state.show_bulk_actions = True
+    
+    # Apply filter if one was selected
+    if 'filter_risk' in st.session_state and st.session_state.filter_risk:
+        st.info(f"🔍 Filtered to {st.session_state.filter_risk} risk members")
+        if st.button("Clear filter"):
+            del st.session_state.filter_risk
+            st.rerun()
+        
+        high_risk_members = data[data['risk_category'] == st.session_state.filter_risk]
+    else:
+        high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
+    
+    # Show member count
+    st.write(f"Showing {len(high_risk_members)} members")
+    
+    # Create header row
+    header_cols = st.columns([1.5, 1, 1.5, 1.5, 1, 1, 1.5, 1.5])
+    headers = ["Member ID", "Group", "Risk", "Days to Churn", "Tenure", "Visits", "Value", "Actions"]
+    for col, header in zip(header_cols, headers):
+        with col:
+            st.markdown(f"**{header}**")
+    
+    st.divider()
+    
+    # Add action buttons for each row
+    for idx, (_, row) in enumerate(high_risk_members.head(20).iterrows()):
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.5, 1, 1.5, 1.5, 1, 1, 1.5, 1.5])
+        
+        with col1:
+            st.write(f"**{row['member_id']}**")
+        with col2:
+            st.write(row['group_id'])
+        with col3:
+            risk_color = RISK_COLORS[row['risk_category']]
+            st.markdown(f"<span style='color: {risk_color}; font-weight: bold;'>{row['risk_category']}</span>", 
+                       unsafe_allow_html=True)
+        with col4:
+            st.write(f"{row['estimated_days_to_churn']} days")
+        with col5:
+            st.write(f"{row['tenure_days']}d")
+        with col6:
+            st.write(str(row['virtual_care_visits']))
+        with col7:
+            st.write(f"${row['lifetime_value']:,.0f}")
+        with col8:
+            # Action buttons - only view details
+            if st.button("↗", key=f"view_{idx}", help="View details", use_container_width=True):
+                st.session_state.selected_member = row['member_id']
+                st.session_state.show_member_details = True
+                st.session_state.current_page = 'Member Details'
+                st.rerun()
+        
+        if idx < 19:  # Don't add divider after last row
+            st.divider()
+    
+    # Download option - moved to sidebar bulk actions
+    st.markdown("---")
+    st.caption("💡 Use the Bulk Actions button above to export data or send communications")
+    st.download_button(
+        label="📥 Download High-Risk Members List",
+        data=csv,
+        file_name=f"high_risk_members_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime='text/csv'
+    )
+
+def show_customer_segments(data):
+    """Customer segmentation page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Insights", "Customer Segments"])
+    
+    create_professional_header(
+        "Customer Segments", 
+        "Understand your member base with AI-powered segmentation"
+    )
+    
+    # Segment metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    segments = ['Premium', 'Standard', 'Emerging', 'New']
+    colors = ['🟢', '🔵', '🟡', '🟣']
+    
+    for col, segment, color in zip([col1, col2, col3, col4], segments, colors):
+        with col:
+            count = len(data[data['segment'] == segment])
+            percentage = (count / len(data)) * 100
+            st.markdown(create_metric_card(
+                segment,
+                f"{count}",
+                f"{percentage:.1f}%",
+                color
+            ), unsafe_allow_html=True)
+    
+    # Visualizations
+    fig_segments, fig_risk_by_segment = create_segmentation_charts(data)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_segments, use_container_width=True)
+    with col2:
+        st.plotly_chart(fig_risk_by_segment, use_container_width=True)
+    
+    # Segment details
+    st.subheader("📊 Segment Analysis")
+    
+    segment_stats = data.groupby('segment').agg({
+        'member_id': 'count',
+        'lifetime_value': 'mean',
+        'virtual_care_visits': 'mean',
+        'tenure_days': 'mean',
+        'risk_score': 'mean'
+    }).round(2)
+    
+    segment_stats.columns = ['Members', 'Avg LTV ($)', 'Avg Virtual Visits', 'Avg Tenure (days)', 'Avg Risk Score']
+    
+    # Format the dataframe without background gradient
+    formatted_stats = segment_stats.copy()
+    formatted_stats['Avg LTV ($)'] = formatted_stats['Avg LTV ($)'].apply(lambda x: f'${x:,.0f}')
+    formatted_stats['Avg Virtual Visits'] = formatted_stats['Avg Virtual Visits'].apply(lambda x: f'{x:.1f}')
+    formatted_stats['Avg Tenure (days)'] = formatted_stats['Avg Tenure (days)'].apply(lambda x: f'{x:.0f}')
+    formatted_stats['Avg Risk Score'] = formatted_stats['Avg Risk Score'].apply(lambda x: f'{x:.2f}')
+    
+    st.dataframe(formatted_stats, use_container_width=True)
+
+def show_risk_analysis(data):
+    """Risk analysis page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Insights", "Risk Analysis"])
+    
+    create_professional_header(
+        "Risk Analysis", 
+        "Deep dive into factors driving member churn"
+    )
+    
+    # Risk factors correlation
+    st.subheader("🔍 Risk Factor Analysis")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Tenure vs Risk
+        fig_tenure = px.scatter(
+            data,
+            x='tenure_days',
+            y='risk_score',
+            color='risk_category',
+            color_discrete_map=RISK_COLORS,
+            title="How does tenure affect churn risk?",
+            labels={'tenure_days': 'Tenure (days)', 'risk_score': 'Risk Score'}
+        )
+        fig_tenure.update_traces(marker=dict(size=8, opacity=0.7))
+        st.plotly_chart(fig_tenure, use_container_width=True)
+    
+    with col2:
+        # Engagement vs Risk
+        fig_engagement = px.scatter(
+            data,
+            x='virtual_care_visits',
+            y='risk_score',
+            color='risk_category',
+            color_discrete_map=RISK_COLORS,
+            title="How does engagement affect churn risk?",
+            labels={'virtual_care_visits': 'Virtual Care Visits', 'risk_score': 'Risk Score'}
+        )
+        fig_engagement.update_traces(marker=dict(size=8, opacity=0.7))
+        st.plotly_chart(fig_engagement, use_container_width=True)
+    
+    # Risk distribution by group
+    st.subheader("📊 Risk Distribution by Group")
+    
+    group_risk = data.groupby(['group_id', 'risk_category']).size().unstack(fill_value=0)
+    group_risk_pct = group_risk.div(group_risk.sum(axis=1), axis=0) * 100
+    
+    fig_group_risk = px.bar(
+        group_risk_pct.reset_index().melt(id_vars='group_id'),
+        x='group_id',
+        y='value',
+        color='risk_category',
+        color_discrete_map=RISK_COLORS,
+        title="Which groups have the highest risk concentration?",
+        labels={'value': 'Percentage (%)', 'group_id': 'Group ID'},
+        barmode='stack'
+    )
+    
+    st.plotly_chart(fig_group_risk, use_container_width=True)
+    
+    # Hazard Analysis Section with clearer intro
+    st.subheader("📈 Hazard Acceleration Analysis")
+    st.write("**Key insight:** Longer gaps between member visits accelerate churn risk exponentially—see curves below.")
+    
+    # Generate hazard function data
+    days_range = np.linspace(0, 365, 100)
+    
+    # Create three hazard curves showing impact of different factors
+    fig_hazard = make_subplots(
+        rows=1, cols=3,
+        subplot_titles=("Impact of Virtual Care Visits", "Impact of Engagement Level", "Impact of Tenure"),
+        horizontal_spacing=0.1
+    )
+    
+    # Factor 1: Virtual Care Visits
+    for visits in [0, 2, 5, 10]:
+        # Hazard increases faster with fewer visits
+        hazard_rate = 0.001 * np.exp(0.01 * days_range) * (1 + 2 / (visits + 1))
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=f"{visits} visits",
+                line=dict(width=2),
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+    
+    # Factor 2: Engagement Level
+    engagement_levels = ["Low", "Medium", "High"]
+    engagement_multipliers = [2.5, 1.5, 0.5]
+    colors = ['#DC2626', '#2563EB', '#16A34A']
+    
+    for level, mult, color in zip(engagement_levels, engagement_multipliers, colors):
+        hazard_rate = 0.001 * np.exp(0.008 * days_range) * mult
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=level,
+                line=dict(width=2, color=color),
+                showlegend=True
+            ),
+            row=1, col=2
+        )
+    
+    # Factor 3: Tenure
+    for tenure_months in [1, 6, 12, 24]:
+        # Hazard decreases with longer tenure
+        hazard_rate = 0.002 * np.exp(0.007 * days_range) / np.sqrt(tenure_months)
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=f"{tenure_months}mo tenure",
+                line=dict(width=2),
+                showlegend=True
+            ),
+            row=1, col=3
+        )
+    
+    # Update layout
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=1)
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=2)
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=3)
+    
+    fig_hazard.update_yaxes(title_text="Hazard Rate", row=1, col=1)
+    
+    fig_hazard.update_layout(
+        height=400,
+        title_text="<b>Simlane.ai Hazard Acceleration Analysis</b>",
+        title_x=0.5,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5
+        )
+    )
+    
+    st.plotly_chart(fig_hazard, use_container_width=True)
+    
+    # Hazard insights
+    st.info("""
+    **📊 Key Insights from Hazard Analysis:**
+    - Members with **0 virtual visits** have 3x higher hazard rate than engaged members
+    - **Low engagement** accelerates churn risk by 150% compared to highly engaged members
+    - Members with **<6 months tenure** show exponentially increasing hazard rates
+    - Interventions are most effective in the first 90 days when hazard rates are climbing
+    """)
+    
+    insights = [
+        f"**Low Engagement Alert**: {len(data[data['virtual_care_visits'] == 0])} members have never used virtual care",
+        f"**New Member Risk**: {len(data[(data['tenure_days'] < 30) & (data['risk_category'].isin(['IMMEDIATE', 'HIGH']))])} new members are already at high risk",
+        f"**Revenue Concentration**: Top 20% of members account for {(data.nlargest(int(len(data)*0.2), 'lifetime_value')['lifetime_value'].sum() / data['lifetime_value'].sum() * 100):.0f}% of total revenue",
+        f"**Group Performance**: Group {data.groupby('group_id')['risk_score'].mean().idxmin()} has the lowest average risk score"
+    ]
+    
+    for insight in insights:
+        st.info(insight)
+
+def show_settings():
+    """Settings page."""
+    create_professional_header(
+        "Settings & Configuration", 
+        "System settings, data management, and user preferences"
+    )
+    
+    tab1, tab2, tab3 = st.tabs(["📊 Data Management", "👤 User Settings", "🔧 System Config"])
+    
+    with tab1:
+        st.subheader("📥 Data Upload")
+        
+        # Enhanced file uploader with drag area feedback
+        uploaded_file = st.file_uploader(
+            "Upload new member data",
+            type=['csv', 'xlsx', 'xls'],
+            help="Accepted formats: CSV, Excel (XLSX, XLS). Max 100MB.",
+            accept_multiple_files=False
+        )
+        
+        if uploaded_file is not None:
+            # Show file info
+            file_size = uploaded_file.size / 1024 / 1024  # Convert to MB
+            st.info(f"📄 **File:** {uploaded_file.name} | **Size:** {file_size:.2f} MB | **Type:** {uploaded_file.type}")
+            
+            try:
+                # Read file based on type
+                if uploaded_file.name.endswith('.csv'):
+                    new_data = pd.read_csv(uploaded_file)
+                else:
+                    new_data = pd.read_excel(uploaded_file)
+                
+                st.success(f"✅ Successfully loaded {len(new_data):,} rows and {len(new_data.columns)} columns")
+                
+                # Schema mapping interface
+                st.subheader("🔄 Map Your Data Fields")
+                st.write("Map your uploaded columns to the required system fields:")
+                
+                # Define required fields
+                required_fields = {
+                    'member_id': 'Unique member identifier',
+                    'group_id': 'Group/Organization ID',
+                    'enrollment_date': 'Member enrollment date',
+                    'tenure_days': 'Days since enrollment',
+                    'estimated_days_to_churn': 'Predicted days to churn'
+                }
+                
+                optional_fields = {
+                    'virtual_care_visits': 'Number of virtual visits',
+                    'in_person_visits': 'Number of in-person visits',
+                    'lifetime_value': 'Member lifetime value ($)',
+                    'segment': 'Customer segment',
+                    'risk_category': 'Risk classification'
+                }
+                
+                # Create mapping interface
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.markdown("**Your Columns:**")
+                    for col in new_data.columns[:10]:  # Show first 10
+                        st.write(f"• {col}")
+                    if len(new_data.columns) > 10:
+                        st.write(f"... and {len(new_data.columns) - 10} more")
+                
+                with col2:
+                    st.markdown("**Map to System Fields:**")
+                    
+                    mappings = {}
+                    
+                    # Required fields
+                    st.markdown("**Required Fields** 🔴")
+                    for field, description in required_fields.items():
+                        mappings[field] = st.selectbox(
+                            f"{field}",
+                            options=['-- Not Mapped --'] + list(new_data.columns),
+                            help=description,
+                            key=f"map_{field}"
+                        )
+                    
+                    # Optional fields
+                    with st.expander("Optional Fields"):
+                        for field, description in optional_fields.items():
+                            mappings[field] = st.selectbox(
+                                f"{field}",
+                                options=['-- Not Mapped --'] + list(new_data.columns),
+                                help=description,
+                                key=f"map_opt_{field}"
+                            )
+                
+                # Validate mapping
+                missing_required = [field for field in required_fields if mappings.get(field) == '-- Not Mapped --']
+                
+                if missing_required:
+                    st.error(f"❌ Missing required fields: {', '.join(missing_required)}")
+                else:
+                    st.markdown("---")
+                    
+                    # Preview mapped data
+                    st.subheader("📋 Data Preview")
+                    preview_data = pd.DataFrame()
+                    for system_field, user_column in mappings.items():
+                        if user_column != '-- Not Mapped --':
+                            preview_data[system_field] = new_data[user_column]
+                    
+                    st.dataframe(preview_data.head(), use_container_width=True)
+                    
+                    if st.button("🚀 Process & Import Data", type="primary", use_container_width=True):
+                        with st.spinner("Processing data..."):
+                            time.sleep(2)  # Simulate processing
+                            st.success("✅ Data imported successfully! Dashboard will update automatically.")
+                            st.balloons()
+                        
+            except Exception as e:
+                st.error(f"❌ Error processing file: {str(e)}")
+                st.write("Please ensure your file is properly formatted.")
+        
+        st.subheader("🗂️ Data Export")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📊 Export Full Dataset", use_container_width=True):
+                data = load_sample_data()
+                csv = data.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv,
+                    file_name=f"member_data_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+        
+        with col2:
+            if st.button("📈 Export Analytics Report", use_container_width=True):
+                st.info("📊 Generating comprehensive analytics report...")
+    
+    with tab2:
+        st.subheader("👤 User Profile")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.text_input("Full Name", value=st.session_state.user['name'])
+            st.text_input("Email", value="user@simlane.ai", help="Primary contact email")
+            st.text_input("Phone Number", value="+1 (555) 123-4567", help="For SMS notifications")
+        
+        with col2:
+            st.selectbox("Role", options=['Admin', 'Analyst', 'Executive'], 
+                        index=0 if st.session_state.user['role'] == 'admin' else 1)
+            st.selectbox("Timezone", options=['EST', 'PST', 'CST', 'UTC'], index=0)
+            st.selectbox("Date Format", options=['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'], index=0)
+        
+        st.subheader("🔔 Notification Preferences")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            email_alerts = st.checkbox("Email Alerts", value=True)
+            if email_alerts:
+                alert_email = st.text_input("Alert Email", value="alerts@simlane.ai", 
+                                          help="Where to send email alerts")
+                email_frequency = st.selectbox("Email Frequency", 
+                                             options=["Immediate", "Daily Digest", "Weekly Summary"])
+        
+        with col2:
+            sms_alerts = st.checkbox("SMS Alerts", value=False)
+            if sms_alerts:
+                alert_phone = st.text_input("Alert Phone", value="+1 (555) 987-6543",
+                                          help="Where to send SMS alerts")
+                sms_threshold = st.select_slider(
+                    "SMS Alert Threshold",
+                    options=["LOW", "MEDIUM", "HIGH", "IMMEDIATE"],
+                    value="HIGH",
+                    help="Only send SMS for risks at or above this level"
+                )
+                
+                # Store SMS settings in session state
+                st.session_state.sms_alerts_enabled = True
+                st.session_state.alert_phone = alert_phone
+                
+                # Add some spacing
+                st.markdown("---")
+                
+                # Test SMS button - make it more prominent
+                st.markdown("**📱 Test SMS Configuration**")
+                col_test1, col_test2 = st.columns([2, 1])
+                with col_test1:
+                    st.info("Send a test message to verify SMS setup")
+                with col_test2:
+                    if st.button("Send Test SMS", type="primary", use_container_width=True):
+                        if alert_phone:
+                            with st.spinner("Sending test message..."):
+                                success, message = sms_manager.send_test_message(alert_phone)
+                                if success:
+                                    st.success(message)
+                                else:
+                                    st.error(message)
+                                    if not TWILIO_AVAILABLE:
+                                        st.warning("💡 To enable SMS, install Twilio: `pip install twilio`")
+                                    else:
+                                        with st.expander("🔧 Twilio Configuration Help"):
+                                            st.markdown("""
+                                            **To configure Twilio:**
+                                            
+                                            **You need THREE things from Twilio:**
+                                            
+                                            1. **Account SID** - Starts with 'AC' (not 'SK')
+                                            2. **Auth Token** - Your account auth token (not API key)
+                                            3. **Twilio Phone Number** - A phone number you've purchased from Twilio
+                                            
+                                            **Setup Methods:**
+                                            
+                                            **Option 1: Create `.streamlit/secrets.toml`:**
+                                            ```toml
+                                            [twilio]
+                                            account_sid = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                            auth_token = "your-auth-token-here"
+                                            from_number = "+1234567890"  # Your Twilio phone number
+                                            ```
+                                            
+                                            **Option 2: Set environment variables:**
+                                            ```bash
+                                            export TWILIO_ACCOUNT_SID="ACxxxxxx"
+                                            export TWILIO_AUTH_TOKEN="your-token"
+                                            export TWILIO_FROM_NUMBER="+1234567890"
+                                            ```
+                                            
+                                            **Get these from:**
+                                            1. [Twilio Console](https://console.twilio.com) - Account SID & Auth Token
+                                            2. [Phone Numbers](https://console.twilio.com/phone-numbers) - Buy a number
+                                            
+                                            **Common Issues:**
+                                            - Using API Key (SKxxxx) instead of Account SID (ACxxxx)
+                                            - Not having a Twilio phone number
+                                            - Using personal number instead of Twilio number for 'from'
+                                            """)
+                                            
+                                            st.error("The 'from' number must be a Twilio phone number you've purchased, not your personal number!")
+                        else:
+                            st.warning("Please enter a phone number first.")
+            else:
+                st.session_state.sms_alerts_enabled = False
+        
+        if email_alerts or sms_alerts:
+            st.multiselect(
+                "Alert Types",
+                options=["New High Risk Members", "Churn Rate Changes", "Segment Shifts", "System Issues"],
+                default=["New High Risk Members", "Churn Rate Changes"]
+            )
+        
+        if st.button("💾 Save User Settings", use_container_width=True):
+            st.success("✅ Settings saved successfully!")
+    
+    with tab3:
+        st.subheader("⚙️ System Configuration")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.number_input("Data Refresh Interval (hours)", value=24, min_value=1)
+            st.number_input("High Risk Alert Threshold (days)", value=30, min_value=1, max_value=90)
+            st.selectbox("Default Dashboard View", options=['Dashboard', 'Churn Predictions', 'Customer Segments'], index=0)
+        
+        with col2:
+            st.checkbox("Auto-generate Weekly Reports", value=True)
+            st.checkbox("Enable Advanced Analytics", value=True)
+            st.selectbox("Export Format", options=['CSV', 'Excel', 'JSON'], index=0)
+        
+        st.subheader("🎯 Risk Thresholds")
+        st.write("Adjust thresholds to see how many members fall into each category:")
+        
+        # Create columns for sliders and preview
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # Threshold sliders
+            immediate_threshold = st.slider(
+                "Immediate Risk (days)", 
+                min_value=1, 
+                max_value=60, 
+                value=30,
+                help="Members likely to churn within this many days"
+            )
+            high_threshold = st.slider(
+                "High Risk (days)", 
+                min_value=immediate_threshold + 1, 
+                max_value=120, 
+                value=90
+            )
+            medium_threshold = st.slider(
+                "Medium Risk (days)", 
+                min_value=high_threshold + 1, 
+                max_value=365, 
+                value=180
+            )
+        
+        with col2:
+            # Live impact preview
+            st.markdown("**Impact Preview:**")
+            
+            # Calculate member counts with current thresholds
+            data = load_sample_data()
+            immediate_count = len(data[data['estimated_days_to_churn'] <= immediate_threshold])
+            high_count = len(data[(data['estimated_days_to_churn'] > immediate_threshold) & 
+                                (data['estimated_days_to_churn'] <= high_threshold)])
+            medium_count = len(data[(data['estimated_days_to_churn'] > high_threshold) & 
+                                  (data['estimated_days_to_churn'] <= medium_threshold)])
+            low_count = len(data[data['estimated_days_to_churn'] > medium_threshold])
+            
+            # Display counts with colors
+            st.markdown(f"""
+            <div class="risk-preview">
+                <div class="risk-preview-item">
+                    <span style="color: {RISK_COLORS['IMMEDIATE']};">🚨 Immediate:</span> {immediate_count} members
+                </div>
+                <div class="risk-preview-item">
+                    <span style="color: {RISK_COLORS['HIGH']};">⚠️ High:</span> {high_count} members
+                </div>
+                <div class="risk-preview-item">
+                    <span style="color: {RISK_COLORS['MEDIUM']};">📊 Medium:</span> {medium_count} members
+                </div>
+                <div class="risk-preview-item">
+                    <span style="color: {RISK_COLORS['LOW']};">✅ Low:</span> {low_count} members
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        if st.button("🔄 Apply Configuration", use_container_width=True):
+            st.success("✅ Configuration updated successfully!")
+
+def show_reporting(data):
+    """Reporting page."""
+    create_professional_header(
+        "Executive Reporting", 
+        "Generate and download comprehensive analytics reports"
+    )
+    
+    # Report configuration
+    st.subheader("📊 Configure Your Report")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        report_type = st.selectbox(
+            "Report Type",
+            options=["Executive Summary", "Risk Analysis Report", "Segment Performance", "Member Engagement", "Custom Report"]
+        )
+        
+        date_range = st.date_input(
+            "Date Range",
+            value=(datetime.now() - timedelta(days=30), datetime.now()),
+            format="MM/DD/YYYY"
+        )
+    
+    with col2:
+        include_charts = st.checkbox("Include Visualizations", value=True)
+        include_recommendations = st.checkbox("Include AI Recommendations", value=True)
+        format_type = st.radio("Export Format", ["PDF", "Excel", "PowerPoint"], horizontal=True)
+    
+    # Report preview
+    st.subheader("📋 Report Preview")
+    
+    with st.expander("Executive Summary", expanded=True):
+        st.markdown(f"""
+        ### Simlane.ai Member Analytics Report
+        **Report Date:** {datetime.now().strftime('%B %d, %Y')}
+        
+        #### Key Metrics
+        - **Total Members:** {len(data):,}
+        - **At-Risk Members:** {len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]):,}
+        - **Average Lifetime Value:** ${data['lifetime_value'].mean():,.0f}
+        - **Churn Risk Rate:** {(len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]) / len(data) * 100):.1f}%
+        
+        #### Top Insights
+        1. **Immediate Action Required:** {len(data[data['risk_category'] == 'IMMEDIATE'])} members at immediate risk
+        2. **Revenue Impact:** ${data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]['lifetime_value'].sum():,.0f} at risk in next 90 days
+        3. **Engagement Crisis:** {len(data[data['virtual_care_visits'] == 0])} members with zero engagement
+        """)
+    
+    # Generate report button
+    if st.button("🚀 Generate Full Report", type="primary", use_container_width=True):
+        with st.spinner("Generating report..."):
+            time.sleep(3)  # Simulate report generation
+            st.success("✅ Report generated successfully!")
+            
+            # Mock download button
+            st.download_button(
+                label=f"📥 Download {report_type} ({format_type})",
+                data=b"Mock report data",  # In production, generate actual report
+                file_name=f"simlane_report_{datetime.now().strftime('%Y%m%d')}.{format_type.lower()}",
+                mime="application/octet-stream"
+            )
+
+# ============================================================================
+# MAIN APPLICATION
+# ============================================================================
+
+def main():
+    """Main application entry point."""
+    init_session_state()
+    
+    # Mobile menu toggle button
+    if st.button("☰", key="mobile_menu", help="Toggle navigation menu"):
+        st.session_state.sidebar_visible = not st.session_state.get('sidebar_visible', True)
+        st.rerun()
+    
+    # Authentication check
+    if not st.session_state.authenticated:
+        login_page()
+        return
+    
+    # Show onboarding for new users
+    if 'show_onboarding' not in st.session_state:
+        st.session_state.show_onboarding = True
+    
+    if st.session_state.show_onboarding:
+        create_onboarding_wizard()
+        return
+    
+    # Main navigation
+    with st.sidebar:
+        st.markdown(f"""
+        <div style="text-align: center; padding: 1rem; margin-bottom: 2rem; 
+                    background: linear-gradient(135deg, #0B3E8E, #0EA5E9); 
+                    border-radius: 10px; color: white;">
+            <h3 style="margin: 0;">Welcome back!</h3>
+            <p style="margin: 0.5rem 0 0 0;">{st.session_state.user['name']}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Navigation menu
+        page = st.radio(
+            "📍 Navigation",
+            options=[
+                "Churn Predictions",
+                "Customer Segments",
+                "Risk Analysis",
+                "Reporting",
+                "Settings"
+            ],
+            index=0  # Default to Churn Predictions
+        )
+        
+        st.markdown("---")
+        
+        # Quick stats
+        data = load_sample_data()
+        st.markdown("**📊 Quick Stats**")
+        st.metric("Total Members", f"{len(data):,}")
+        st.metric("At Risk", f"{len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]):,}")
+        st.metric("Avg LTV", f"${data['lifetime_value'].mean():.0f}")
+        
+        st.markdown("---")
+        
+        # Bulk actions drawer (if active)
+        if st.session_state.get('show_bulk_actions', False) and page == "Churn Predictions":
+            st.markdown("### 📋 Bulk Actions")
+            
+            # Get current filtered data
+            if 'filter_risk' in st.session_state and st.session_state.filter_risk:
+                bulk_data = data[data['risk_category'] == st.session_state.filter_risk]
+            else:
+                bulk_data = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]
+            
+            # Summary
+            selected_count = len(bulk_data)
+            total_ltv = bulk_data['lifetime_value'].sum()
+            st.info(f"**{selected_count} members selected**  \nEst. ${total_ltv:,.0f} LTV")
+            
+            # Action type
+            action_type = st.radio(
+                "Choose action:",
+                ["📧 Email Campaign", "📱 SMS Alert", "📥 Export CSV"],
+                label_visibility="collapsed"
+            )
+            
+            if action_type == "📧 Email Campaign":
+                campaign_type = st.selectbox(
+                    "Template:",
+                    ["Risk Alert", "Win-back Offer", "Engagement Campaign"]
+                )
+                if st.button("Send Emails", type="primary", use_container_width=True):
+                    st.success(f"✅ Email campaign queued for {selected_count} members")
+                    st.session_state.show_bulk_actions = False
+                    time.sleep(2)
+                    st.rerun()
+                    
+            elif action_type == "📱 SMS Alert":
+                if st.button("Send SMS Alerts", type="primary", use_container_width=True):
+                    if 'sms_alerts_enabled' in st.session_state and st.session_state.sms_alerts_enabled:
+                        st.success(f"✅ SMS alerts sent to {min(selected_count, 10)} highest-risk members")
+                    else:
+                        st.warning("Please configure SMS in Settings first")
+                    st.session_state.show_bulk_actions = False
+                    time.sleep(2)
+                    st.rerun()
+                    
+            elif action_type == "📥 Export CSV":
+                csv = bulk_data.to_csv(index=False)
+                st.download_button(
+                    label="Download CSV",
+                    data=csv,
+                    file_name=f"high_risk_members_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            if st.button("Close", use_container_width=True):
+                st.session_state.show_bulk_actions = False
+                st.rerun()
+            
+            st.markdown("---")
+        
+        # Logout button
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.username = None
+            st.session_state.user = None
+            st.rerun()
+    
+    # Load data
+    data = load_sample_data()
+    
+    # Route to appropriate page
+    if page == "Churn Predictions":
+        show_churn_predictions(data)
+    elif page == "Customer Segments":
+        show_customer_segments(data)
+    elif page == "Risk Analysis":
+        show_risk_analysis(data)
+    elif page == "Reporting":
+        show_reporting(data)
+    elif page == "Settings":
+        show_settings()
+    elif 'selected_member' in st.session_state and st.session_state.get('current_page') == 'Member Details':
+        show_member_details(st.session_state.selected_member, data)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #94a3b8; padding: 1rem;">
+        <small>© 2025 Simlane.ai Analytics Platform | Secure Business Intelligence</small>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ============================================================================
+# RUN APPLICATION
+# ============================================================================
+
+if __name__ == "__main__":
+    main()
