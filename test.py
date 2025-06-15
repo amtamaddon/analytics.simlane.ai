@@ -395,7 +395,9 @@ def show_churn_predictions():
         'Days to Churn': high_risk['estimated_days_to_churn'],
         'Tenure': high_risk['tenure_days'].astype(str) + ' days',
         'Visits': high_risk['virtual_care_visits'] + high_risk['in_person_visits'],
-        'Value': '
+        'Value': '$' + high_risk['lifetime_value'].round(2).astype(str),
+        'Actions': ['View Details'] * len(high_risk)
+    })
 
 def show_customer_segments():
     st.title("👥 Customer Segments")
