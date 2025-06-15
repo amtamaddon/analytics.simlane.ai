@@ -52,11 +52,7 @@ st.set_page_config(
 # CONSTANTS AND CONFIGURATION
 # ============================================================================
 
-# Simlane brand colors (based on green logo)
-SIMLANE_GREEN = '#6B9F3F'  # Primary green from logo
-SIMLANE_LIGHT_GREEN = '#C5D9B7'  # Light green from logo background
-
-# Semantic color palette for risk categories
+# Semantic color palette for risk categories - CONSISTENT EVERYWHERE
 RISK_COLORS = {
     'IMMEDIATE': '#DC2626',  # Red
     'HIGH': '#EA580C',       # Orange  
@@ -66,7 +62,7 @@ RISK_COLORS = {
 
 # Chart color sequences
 RISK_COLOR_SEQUENCE = ['#DC2626', '#EA580C', '#2563EB', '#16A34A']
-BRAND_COLORS = ['#6B9F3F', '#8BC34A', '#4CAF50', '#2196F3', '#FF9800']
+BRAND_COLORS = ['#2563EB', '#7C3AED', '#DB2777', '#DC2626', '#EA580C']
 
 # ============================================================================
 # CUSTOM STYLING
@@ -162,9 +158,9 @@ st.markdown("""
         }
     }
     
-    # Onboarding wizard styling with Simlane green
+    /* Onboarding wizard styling */
     .onboarding-header {
-        background: linear-gradient(135deg, #6B9F3F 0%, #8BC34A 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         padding: 3rem;
         border-radius: 16px;
@@ -365,15 +361,10 @@ def login_page():
     with col2:
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
-            <div style="background: #C5D9B7; border-radius: 12px; padding: 2rem; display: inline-block;">
-                <div style="color: #6B9F3F; font-size: 4rem; font-weight: bold;">
-                    ➜➜➜
-                </div>
-                <h1 style="color: #6B9F3F; font-size: 3rem; margin: 0;">
-                    Simlane
-                </h1>
-            </div>
-            <p style="color: #64748b; font-size: 1.25rem; margin-top: 1rem;">
+            <h1 style="color: #2563EB; font-size: 3rem; margin-bottom: 0.5rem;">
+                🎯 Simlane.ai
+            </h1>
+            <p style="color: #64748b; font-size: 1.25rem;">
                 Advanced Member Analytics Platform
             </p>
         </div>
@@ -520,9 +511,9 @@ def load_sample_data():
 # ============================================================================
 
 def create_professional_header(title, subtitle):
-    """Create a professional header with Simlane branding."""
+    """Create a professional header with improved accessibility."""
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #6B9F3F 0%, #8BC34A 100%); 
+    <div style="background: linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%); 
                 color: white; 
                 padding: 2.5rem 2rem; 
                 border-radius: 12px; 
@@ -1101,7 +1092,7 @@ The Simlane Team"""
                     st.session_state.show_email_composer = False
                     st.rerun()
     
-    # Engagement Timeline
+    # Engagement Timeline with consistent colors
     st.subheader("📊 Engagement Timeline")
     
     # Generate sample engagement data
@@ -1123,7 +1114,7 @@ The Simlane Team"""
         y=['virtual_visits', 'in_person_visits'],
         title="Monthly Visit History",
         labels={'value': 'Number of Visits', 'date': 'Month'},
-        color_discrete_map={'virtual_visits': '#2563EB', 'in_person_visits': '#7C3AED'}
+        color_discrete_map={'virtual_visits': BRAND_COLORS[0], 'in_person_visits': BRAND_COLORS[1]}
     )
     
     st.plotly_chart(fig_timeline, use_container_width=True)
@@ -2086,7 +2077,7 @@ def main():
     with st.sidebar:
         st.markdown(f"""
         <div style="text-align: center; padding: 1rem; margin-bottom: 2rem; 
-                    background: linear-gradient(135deg, #6B9F3F, #8BC34A); 
+                    background: linear-gradient(135deg, #2563EB, #7C3AED); 
                     border-radius: 10px; color: white;">
             <h3 style="margin: 0;">Welcome back!</h3>
             <p style="margin: 0.5rem 0 0 0;">{st.session_state.user['name']}</p>
