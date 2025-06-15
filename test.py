@@ -658,7 +658,7 @@ def create_onboarding_wizard():
     <div class="onboarding-header">
         <h1 style="font-size: 3rem; margin-bottom: 1rem;">🎯 Welcome to Simlane.ai</h1>
         <p style="font-size: 1.25rem; opacity: 0.95;">
-            Let's get your analytics platform set up in just 3 steps
+            Let's get your analytics platform set up in just 4 steps
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -667,13 +667,13 @@ def create_onboarding_wizard():
     if 'onboarding_step' not in st.session_state:
         st.session_state.onboarding_step = 1
     
-    progress = st.session_state.onboarding_step / 3
+    progress = st.session_state.onboarding_step / 4
     st.progress(progress)
     
     # Step 1: Upload Data
     if st.session_state.onboarding_step == 1:
         st.header("Step 1: Upload Your Member Data")
-        st.write("We'll help you map your data to our system fields.")
+        st.write("Start by uploading your member data file. We support CSV and Excel formats.")
         
         uploaded_file = st.file_uploader(
             "Choose a CSV or Excel file",
@@ -682,14 +682,122 @@ def create_onboarding_wizard():
         )
         
         if uploaded_file:
-            st.success("✅ File uploaded successfully!")
-            if st.button("Continue to Configuration", type="primary"):
-                st.session_state.onboarding_step = 2
-                st.rerun()
+            try:
+                # Read file based on type
+                if uploaded_file.name.endswith('.csv'):
+                    st.session_state.uploaded_data = pd.read_csv(uploaded_file)
+                else:
+                    st.session_state.uploaded_data = pd.read_excel(uploaded_file)
+                
+                st.success(f"✅ Successfully loaded {len(st.session_state.uploaded_data):,} rows and {len(st.session_state.uploaded_data.columns)} columns")
+                
+                # Show preview
+                st.subheader("Data Preview")
+                st.dataframe(st.session_state.uploaded_data.head(), use_container_width=True)
+                
+                if st.button("Continue to Field Mapping", type="primary"):
+                    st.session_state.onboarding_step = 2
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
     
-    # Step 2: Configure Alerts
+    # Step 2: Map Fields
     elif st.session_state.onboarding_step == 2:
-        st.header("Step 2: Set Up Your Alerts")
+        st.header("Step 2: Map Your Data Fields")
+        st.write("Help us understand your data by mapping your columns to our system fields.")
+        
+        if 'uploaded_data' not in st.session_state:
+            st.warning("No data found. Please go back to Step 1.")
+            if st.button("← Back to Upload"):
+                st.session_state.onboarding_step = 1
+                st.rerun()
+            return
+        
+        uploaded_data = st.session_state.uploaded_data
+        
+        # Define required fields
+        required_fields = {
+            'member_id': 'Unique member identifier',
+            'group_id': 'Group/Organization ID',
+            'enrollment_date': 'Member enrollment date',
+            'estimated_days_to_churn': 'Predicted days until churn'
+        }
+        
+        optional_fields = {
+            'tenure_days': 'Days since enrollment',
+            'virtual_care_visits': 'Number of virtual visits',
+            'in_person_visits': 'Number of in-person visits',
+            'lifetime_value': 'Member lifetime value ($)',
+            'risk_category': 'Risk classification (IMMEDIATE/HIGH/MEDIUM/LOW)'
+        }
+        
+        # Create mapping interface
+        st.subheader("🔴 Required Fields")
+        
+        if 'field_mappings' not in st.session_state:
+            st.session_state.field_mappings = {}
+        
+        all_columns = ['-- Not Mapped --'] + list(uploaded_data.columns)
+        
+        for field, description in required_fields.items():
+            # Try to auto-detect similar column names
+            default_value = '-- Not Mapped --'
+            for col in uploaded_data.columns:
+                if field.lower() in col.lower() or col.lower() in field.lower():
+                    default_value = col
+                    break
+            
+            st.session_state.field_mappings[field] = st.selectbox(
+                f"{field}",
+                options=all_columns,
+                index=all_columns.index(default_value) if default_value in all_columns else 0,
+                help=description,
+                key=f"onboard_map_{field}"
+            )
+        
+        # Optional fields
+        with st.expander("🔵 Optional Fields"):
+            for field, description in optional_fields.items():
+                # Try to auto-detect
+                default_value = '-- Not Mapped --'
+                for col in uploaded_data.columns:
+                    if field.lower() in col.lower() or col.lower() in field.lower():
+                        default_value = col
+                        break
+                
+                st.session_state.field_mappings[field] = st.selectbox(
+                    f"{field}",
+                    options=all_columns,
+                    index=all_columns.index(default_value) if default_value in all_columns else 0,
+                    help=description,
+                    key=f"onboard_map_opt_{field}"
+                )
+        
+        # Validate mapping
+        missing_required = [field for field in required_fields 
+                          if st.session_state.field_mappings.get(field) == '-- Not Mapped --']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("← Back", use_container_width=True):
+                st.session_state.onboarding_step = 1
+                st.rerun()
+        
+        with col2:
+            if missing_required:
+                st.error(f"Please map these required fields: {', '.join(missing_required)}")
+            else:
+                if st.button("Continue to Configuration", type="primary", use_container_width=True):
+                    # Process the mapped data
+                    st.session_state.data_mapped = True
+                    st.session_state.onboarding_step = 3
+                    st.rerun()
+    
+    # Step 3: Configure Alerts
+    elif st.session_state.onboarding_step == 3:
+        st.header("Step 3: Set Up Your Alerts")
         st.write("Choose how you want to be notified about at-risk members.")
         
         col1, col2 = st.columns(2)
@@ -697,27 +805,36 @@ def create_onboarding_wizard():
         with col1:
             email_alerts = st.checkbox("📧 Email Alerts", value=True)
             if email_alerts:
-                st.text_input("Email Address", value="alerts@simlane.ai")
+                st.text_input("Email Address", value="alerts@simlane.ai", key="onboard_email")
         
         with col2:
             sms_alerts = st.checkbox("📱 SMS Alerts", value=False)
             if sms_alerts:
-                st.text_input("Phone Number", placeholder="+1 (555) 123-4567")
+                st.text_input("Phone Number", placeholder="+1 (555) 123-4567", key="onboard_phone")
         
         st.selectbox(
             "Alert me when risk level is:",
             options=["IMMEDIATE", "HIGH", "MEDIUM"],
-            help="You'll only receive alerts for members at or above this risk level"
+            help="You'll only receive alerts for members at or above this risk level",
+            key="onboard_alert_threshold"
         )
         
-        if st.button("Continue to Dashboard", type="primary"):
-            st.session_state.onboarding_step = 3
-            st.session_state.onboarding_complete = True
-            st.rerun()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("← Back", use_container_width=True):
+                st.session_state.onboarding_step = 2
+                st.rerun()
+        
+        with col2:
+            if st.button("Continue to Dashboard", type="primary", use_container_width=True):
+                st.session_state.onboarding_step = 4
+                st.session_state.onboarding_complete = True
+                st.rerun()
     
-    # Step 3: Tour
-    elif st.session_state.onboarding_step == 3:
-        st.header("Step 3: Quick Tour")
+    # Step 4: Tour
+    elif st.session_state.onboarding_step == 4:
+        st.header("Step 4: Quick Tour")
         st.write("Here's what you can do with Simlane.ai:")
         
         features = [
@@ -731,9 +848,18 @@ def create_onboarding_wizard():
         for icon_title, description in features:
             st.info(f"**{icon_title}**: {description}")
         
-        if st.button("🚀 Start Using Simlane.ai", type="primary", use_container_width=True):
-            st.session_state.show_onboarding = False
-            st.rerun()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("← Back", use_container_width=True):
+                st.session_state.onboarding_step = 3
+                st.rerun()
+        
+        with col2:
+            if st.button("🚀 Start Using Simlane.ai", type="primary", use_container_width=True):
+                st.session_state.show_onboarding = False
+                st.session_state.data_uploaded = True  # Mark that we have data
+                st.rerun()
 
 # ============================================================================
 # PAGE FUNCTIONS
@@ -910,7 +1036,34 @@ The Simlane Team"""
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("Send Email", type="primary"):
-                    st.success("📧 Email sent successfully!")
+                    # In production, you would integrate with an email service like:
+                    # - SendGrid: pip install sendgrid
+                    # - AWS SES: pip install boto3
+                    # - SMTP: using Python's built-in smtplib
+                    
+                    # Example with generic SMTP (works with Gmail, Outlook, etc.):
+                    # import smtplib
+                    # from email.mime.text import MIMEText
+                    # from email.mime.multipart import MIMEMultipart
+                    # 
+                    # smtp_server = "smtp.gmail.com"
+                    # smtp_port = 587
+                    # sender_email = "your-email@gmail.com"
+                    # sender_password = "your-app-password"
+                    # 
+                    # msg = MIMEMultipart()
+                    # msg['From'] = sender_email
+                    # msg['To'] = email_to
+                    # msg['Subject'] = email_subject
+                    # msg.attach(MIMEText(email_content, 'plain'))
+                    # 
+                    # with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    #     server.starttls()
+                    #     server.login(sender_email, sender_password)
+                    #     server.send_message(msg)
+                    
+                    st.success(f"📧 Email sent successfully to {email_to}!")
+                    st.info("💡 In production, this would send a real email via your configured email service.")
                     st.session_state.show_email_composer = False
                     time.sleep(2)
                     st.rerun()
@@ -1920,14 +2073,15 @@ def main():
             st.session_state.current_page = 'Dashboard'
             st.rerun()
         
-        # Insights section
-        st.markdown("#### 📊 Insights")
-        insights_options = ["Churn Predictions", "Customer Segments", "Risk Analysis"]
-        for option in insights_options:
-            if st.button(f"  {option}", use_container_width=True,
-                        type="primary" if st.session_state.get('current_page') == option else "secondary"):
-                st.session_state.current_page = option
-                st.rerun()
+        # Insights section with expandable submenu
+        with st.expander("📊 Insights", expanded=True):
+            insights_options = ["Churn Predictions", "Customer Segments", "Risk Analysis"]
+            for option in insights_options:
+                if st.button(f"{option}", use_container_width=True,
+                            type="primary" if st.session_state.get('current_page') == option else "secondary",
+                            key=f"nav_{option}"):
+                    st.session_state.current_page = option
+                    st.rerun()
         
         # Reports
         if st.button("📈 Reporting", use_container_width=True,
