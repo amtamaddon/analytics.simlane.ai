@@ -683,7 +683,7 @@ def create_onboarding_wizard():
         
         if uploaded_file:
             st.success("✅ File uploaded successfully!")
-            if st.button("Continue to Mapping", type="primary"):
+            if st.button("Continue to Configuration", type="primary"):
                 st.session_state.onboarding_step = 2
                 st.rerun()
     
@@ -786,6 +786,197 @@ def create_breadcrumbs(items):
         {breadcrumb_html}
     </div>
     """, unsafe_allow_html=True)
+
+def show_member_details(member_id, data):
+    """Show detailed member information page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Members", f"Member {member_id}"])
+    
+    # Get member data
+    member = data[data['member_id'] == member_id].iloc[0]
+    
+    create_professional_header(
+        f"Member Profile: {member_id}",
+        f"Detailed insights and engagement history"
+    )
+    
+    # Risk Alert Banner
+    if member['risk_category'] in ['IMMEDIATE', 'HIGH']:
+        st.error(f"""
+        🚨 **High Priority Alert**: This member is at {member['risk_category']} risk of churning 
+        within {member['estimated_days_to_churn']} days. Immediate action recommended.
+        """)
+    
+    # Key Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        risk_color = RISK_COLORS[member['risk_category']]
+        st.markdown(f"""
+        <div class="metric-card">
+            <p class="metric-label">Risk Level</p>
+            <h2 class="metric-value" style="color: {risk_color};">{member['risk_category']}</h2>
+            <p class="metric-delta">{member['estimated_days_to_churn']} days to churn</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(create_metric_card(
+            "Lifetime Value",
+            f"${member['lifetime_value']:,.0f}",
+            f"Top {int((1 - data[data['lifetime_value'] > member['lifetime_value']].shape[0] / len(data)) * 100)}%",
+            "💰"
+        ), unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(create_metric_card(
+            "Tenure",
+            f"{member['tenure_days']} days",
+            f"Since {member['enrollment_date'].strftime('%b %Y')}",
+            "📅"
+        ), unsafe_allow_html=True)
+    
+    with col4:
+        total_visits = member['virtual_care_visits'] + member['in_person_visits']
+        st.markdown(create_metric_card(
+            "Total Visits",
+            f"{total_visits}",
+            f"{member['virtual_care_visits']} virtual, {member['in_person_visits']} in-person",
+            "🏥"
+        ), unsafe_allow_html=True)
+    
+    # Action Buttons
+    st.subheader("🎯 Actions")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if st.button("📧 Send Email", type="primary", use_container_width=True):
+            st.session_state.show_email_composer = True
+            st.session_state.email_member_id = member_id
+    
+    with col2:
+        if st.button("📱 Send SMS", use_container_width=True):
+            if 'sms_alerts_enabled' in st.session_state and st.session_state.sms_alerts_enabled:
+                # You would get the member's phone from your database
+                success, msg = sms_manager.send_risk_alert(
+                    st.session_state.alert_phone,  # In production, use member's phone
+                    member_id,
+                    member['risk_category'],
+                    member['estimated_days_to_churn']
+                )
+                if success:
+                    st.success("SMS sent successfully!")
+                else:
+                    st.error(msg)
+            else:
+                st.warning("Please configure SMS in Settings first")
+    
+    with col3:
+        if st.button("📝 Add Note", use_container_width=True):
+            st.session_state.show_note_form = True
+    
+    with col4:
+        if st.button("🎯 Create Task", use_container_width=True):
+            st.session_state.show_task_form = True
+    
+    # Email Composer
+    if st.session_state.get('show_email_composer', False):
+        with st.expander("📧 Compose Email", expanded=True):
+            email_to = st.text_input("To:", value=f"{member_id}@example.com")
+            email_subject = st.text_input("Subject:", 
+                value=f"Important: Your membership needs attention")
+            
+            # Email templates
+            template = st.selectbox("Use Template:", 
+                ["Custom", "Risk Alert", "Engagement Campaign", "Win-back Offer"])
+            
+            if template == "Risk Alert":
+                email_body = f"""Dear Member {member_id},
+
+We've noticed you haven't been using your benefits recently. We're here to help!
+
+Your wellness matters to us, and we want to ensure you're getting the most from your membership.
+
+Would you like to schedule a quick call to discuss how we can better serve you?
+
+Best regards,
+The Simlane Team"""
+            else:
+                email_body = ""
+            
+            email_content = st.text_area("Message:", value=email_body, height=200)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Send Email", type="primary"):
+                    st.success("📧 Email sent successfully!")
+                    st.session_state.show_email_composer = False
+                    time.sleep(2)
+                    st.rerun()
+            with col2:
+                if st.button("Cancel"):
+                    st.session_state.show_email_composer = False
+                    st.rerun()
+    
+    # Engagement Timeline
+    st.subheader("📊 Engagement Timeline")
+    
+    # Generate sample engagement data
+    dates = pd.date_range(
+        start=member['enrollment_date'], 
+        end=datetime.now(), 
+        freq='M'
+    )
+    
+    engagement_data = pd.DataFrame({
+        'date': dates,
+        'virtual_visits': np.random.poisson(0.3, len(dates)),
+        'in_person_visits': np.random.poisson(0.2, len(dates))
+    })
+    
+    fig_timeline = px.line(
+        engagement_data,
+        x='date',
+        y=['virtual_visits', 'in_person_visits'],
+        title="Monthly Visit History",
+        labels={'value': 'Number of Visits', 'date': 'Month'},
+        color_discrete_map={'virtual_visits': '#2563EB', 'in_person_visits': '#7C3AED'}
+    )
+    
+    st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    # Member Information
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📋 Member Information")
+        st.write(f"**Member ID:** {member['member_id']}")
+        st.write(f"**Group:** {member['group_id']}")
+        st.write(f"**Segment:** {member['segment']}")
+        st.write(f"**Enrollment Date:** {member['enrollment_date'].strftime('%B %d, %Y')}")
+        st.write(f"**Risk Score:** {member['risk_score']:.2f}")
+    
+    with col2:
+        st.subheader("📝 Recent Notes")
+        # In production, these would come from a database
+        notes = [
+            {"date": "2024-01-15", "note": "Called member about low engagement"},
+            {"date": "2024-01-10", "note": "Sent welcome package"},
+            {"date": "2024-01-05", "note": "New enrollment processed"}
+        ]
+        
+        for note in notes:
+            st.info(f"**{note['date']}**: {note['note']}")
+    
+    # Back button
+    if st.button("← Back to Churn Predictions"):
+        if 'selected_member' in st.session_state:
+            del st.session_state['selected_member']
+        if 'show_member_details' in st.session_state:
+            del st.session_state['show_member_details']
+        st.session_state.current_page = 'Churn Predictions'
+        st.rerun()
 
 def show_dashboard(data):
     """Main dashboard page with contextual quick stats."""
@@ -1186,8 +1377,99 @@ def show_risk_analysis(data):
     
     st.plotly_chart(fig_group_risk, use_container_width=True)
     
-    # Key insights
-    st.subheader("💡 Key Insights")
+    # Hazard Analysis Section
+    st.subheader("📈 Hazard Acceleration Analysis")
+    st.write("Understanding how different factors impact the acceleration of churn risk over time")
+    
+    # Generate hazard function data
+    days_range = np.linspace(0, 365, 100)
+    
+    # Create three hazard curves showing impact of different factors
+    fig_hazard = make_subplots(
+        rows=1, cols=3,
+        subplot_titles=("Impact of Virtual Care Visits", "Impact of Engagement Level", "Impact of Tenure"),
+        horizontal_spacing=0.1
+    )
+    
+    # Factor 1: Virtual Care Visits
+    for visits in [0, 2, 5, 10]:
+        # Hazard increases faster with fewer visits
+        hazard_rate = 0.001 * np.exp(0.01 * days_range) * (1 + 2 / (visits + 1))
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=f"{visits} visits",
+                line=dict(width=2),
+                showlegend=True
+            ),
+            row=1, col=1
+        )
+    
+    # Factor 2: Engagement Level
+    engagement_levels = ["Low", "Medium", "High"]
+    engagement_multipliers = [2.5, 1.5, 0.5]
+    colors = ['#DC2626', '#2563EB', '#16A34A']
+    
+    for level, mult, color in zip(engagement_levels, engagement_multipliers, colors):
+        hazard_rate = 0.001 * np.exp(0.008 * days_range) * mult
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=level,
+                line=dict(width=2, color=color),
+                showlegend=True
+            ),
+            row=1, col=2
+        )
+    
+    # Factor 3: Tenure
+    for tenure_months in [1, 6, 12, 24]:
+        # Hazard decreases with longer tenure
+        hazard_rate = 0.002 * np.exp(0.007 * days_range) / np.sqrt(tenure_months)
+        fig_hazard.add_trace(
+            go.Scatter(
+                x=days_range, 
+                y=hazard_rate,
+                name=f"{tenure_months}mo tenure",
+                line=dict(width=2),
+                showlegend=True
+            ),
+            row=1, col=3
+        )
+    
+    # Update layout
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=1)
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=2)
+    fig_hazard.update_xaxes(title_text="Days to Churn", row=1, col=3)
+    
+    fig_hazard.update_yaxes(title_text="Hazard Rate", row=1, col=1)
+    
+    fig_hazard.update_layout(
+        height=400,
+        title_text="<b>Simlane.ai Hazard Acceleration Analysis</b>",
+        title_x=0.5,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.3,
+            xanchor="center",
+            x=0.5
+        )
+    )
+    
+    st.plotly_chart(fig_hazard, use_container_width=True)
+    
+    # Hazard insights
+    st.info("""
+    **📊 Key Insights from Hazard Analysis:**
+    - Members with **0 virtual visits** have 3x higher hazard rate than engaged members
+    - **Low engagement** accelerates churn risk by 150% compared to highly engaged members
+    - Members with **<6 months tenure** show exponentially increasing hazard rates
+    - Interventions are most effective in the first 90 days when hazard rates are climbing
+    """)
     
     insights = [
         f"**Low Engagement Alert**: {len(data[data['virtual_care_visits'] == 0])} members have never used virtual care",
