@@ -52,16 +52,16 @@ st.set_page_config(
 # CONSTANTS AND CONFIGURATION
 # ============================================================================
 
-# Semantic color palette for risk categories - WCAG AA compliant
+# Semantic color palette for risk categories
 RISK_COLORS = {
-    'IMMEDIATE': '#D92D20',  # Red - 5.4:1 contrast
-    'HIGH': '#F97316',       # Orange - clear progression
-    'MEDIUM': '#3B82F6',     # Blue - familiar standard
-    'LOW': '#16A34A'         # Green - passes contrast
+    'IMMEDIATE': '#DC2626',  # Red
+    'HIGH': '#EA580C',       # Orange  
+    'MEDIUM': '#2563EB',     # Blue
+    'LOW': '#16A34A'         # Green
 }
 
 # Chart color sequences
-RISK_COLOR_SEQUENCE = ['#D92D20', '#F97316', '#3B82F6', '#16A34A']
+RISK_COLOR_SEQUENCE = ['#DC2626', '#EA580C', '#2563EB', '#16A34A']
 BRAND_COLORS = ['#2563EB', '#7C3AED', '#DB2777', '#DC2626', '#EA580C']
 
 # ============================================================================
@@ -223,13 +223,29 @@ class SMSManager:
                 if account_sid.startswith("AC") and len(account_sid) == 34 and auth_token != "...":
                     try:
                         self.client = TwilioClient(account_sid, auth_token)
-                        # Success - no need for constant banners
+                        # Check if toll-free number
+                        if self.from_number and any(self.from_number.startswith(prefix) for prefix in ['+1833', '+1844', '+1855', '+1866', '+1877', '+1888']):
+                            # Use container for auto-dismiss
+                            with st.container():
+                                warning = st.warning("⚠️ You're using a toll-free number. This requires verification for SMS. Consider getting a regular local number for immediate use.")
+                                time.sleep(10)
+                                warning.empty()
+                        # Success message that auto-dismisses
+                        with st.container():
+                            success = st.success(f"✅ Twilio initialized with Account SID: {account_sid[:6]}...{account_sid[-4:]}")
+                            time.sleep(5)
+                            success.empty()
                     except Exception as e:
-                        # Only show error if there's an actual problem
-                        pass
+                        st.error(f"Twilio initialization error: {str(e)}")
                 else:
-                    # Silently fail - user hasn't configured Twilio yet
-                    pass
+                    st.warning("⚠️ Twilio credentials not properly configured.")
+                    # Debug info (remove in production)
+                    if not account_sid.startswith("AC"):
+                        st.error(f"Account SID should start with 'AC', got: {account_sid[:4]}...")
+                    if len(account_sid) != 34:
+                        st.error(f"Account SID should be 34 characters, got: {len(account_sid)}")
+                    if auth_token == "...":
+                        st.error("Auth token not set")
                 
             except Exception as e:
                 st.error(f"Failed to initialize Twilio: {str(e)}")
@@ -454,17 +470,19 @@ def generate_sample_data(n_members=500):
             risk_category.append('LOW')
     
     # Generate customer segments
-    segments = ['Premium', 'Standard', 'Emerging', 'New']  # Removed 'Basic', renamed 'At-Risk' to 'Emerging'
+    segments = ['Premium', 'Standard', 'Basic', 'At-Risk', 'New']
     segment = []
     for i in range(n_members):
         if lifetime_value[i] > 1500 and virtual_care_visits[i] > 5:
             segment.append('Premium')
         elif risk_category[i] in ['IMMEDIATE', 'HIGH']:
-            segment.append('Emerging')  # Renamed from 'At-Risk'
+            segment.append('At-Risk')
         elif tenure_days[i] < 30:
             segment.append('New')
+        elif lifetime_value[i] < 500:
+            segment.append('Basic')
         else:
-            segment.append('Standard')  # Absorbs old 'Basic' segment
+            segment.append('Standard')
     
     # Create DataFrame
     df = pd.DataFrame({
@@ -495,7 +513,7 @@ def load_sample_data():
 def create_professional_header(title, subtitle):
     """Create a professional header with improved accessibility."""
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #0B3E8E 0%, #0EA5E9 100%); 
+    <div style="background: linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%); 
                 color: white; 
                 padding: 2.5rem 2rem; 
                 border-radius: 12px; 
@@ -504,14 +522,13 @@ def create_professional_header(title, subtitle):
         <h1 style="margin: 0; 
                    font-size: 2.5rem; 
                    font-weight: 700;
-                   text-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                   text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             🎯 {title}
         </h1>
         <p style="margin: 0.5rem 0 0 0; 
                   font-size: 1.125rem; 
                   opacity: 0.95;
-                  font-weight: 500;
-                  text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                  font-weight: 500;">
             {subtitle}
         </p>
     </div>
@@ -611,28 +628,22 @@ def create_segmentation_charts(data):
     risk_order = ['IMMEDIATE', 'HIGH', 'MEDIUM', 'LOW']
     segment_risk = segment_risk.reindex(columns=risk_order, fill_value=0)
     
-    # Create stacked bar chart for better visualization
-    fig_risk_by_segment = go.Figure()
-    
-    for risk in risk_order:
-        fig_risk_by_segment.add_trace(go.Bar(
-            name=risk,
-            x=segment_risk.index,
-            y=segment_risk[risk],
-            marker_color=RISK_COLORS[risk]
-        ))
+    fig_risk_by_segment = px.bar(
+        segment_risk.T,
+        title="Which segments have the highest risk?",
+        labels={'index': 'Risk Category', 'value': 'Number of Members'},
+        barmode='group',
+        color_discrete_map=RISK_COLORS
+    )
     
     fig_risk_by_segment.update_layout(
-        barmode='stack',
-        title="Which segments have the highest risk?",
-        xaxis_title="Segment",
-        yaxis_title="Number of Members",
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
+        xaxis_title="Segment",
+        yaxis_title="Number of Members",
+        legend_title="Risk Category",
         title_font_size=16,
-        title_font_weight='bold',
-        showlegend=True,
-        legend_title="Risk Category"
+        title_font_weight='bold'
     )
     
     return fig_segments, fig_risk_by_segment
@@ -661,31 +672,11 @@ def create_onboarding_wizard():
     
     # Step 1: Upload Data
     if st.session_state.onboarding_step == 1:
-        st.header("Step 1: Choose Your Data Source")
-        st.write("Start with your own data or explore with our demo dataset.")
-        
-        # Option buttons
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("📊 Load Demo Data", type="primary", use_container_width=True,
-                        help="Instantly explore the platform with sample data"):
-                st.session_state.demo_mode = True
-                st.session_state.data_uploaded = True
-                st.session_state.onboarding_step = 3  # Skip to alerts
-                with st.spinner("Loading demo data..."):
-                    time.sleep(1)
-                st.success("✅ Demo data loaded! Skipping to alert configuration.")
-                time.sleep(1)
-                st.rerun()
-        
-        with col2:
-            st.markdown("**or upload your own data**")
-        
-        st.markdown("---")
+        st.header("Step 1: Upload Your Member Data")
+        st.write("Start by uploading your member data file. We support CSV and Excel formats.")
         
         uploaded_file = st.file_uploader(
-            "Upload a CSV or Excel file",
+            "Choose a CSV or Excel file",
             type=['csv', 'xlsx', 'xls'],
             help="Your data is secure and never leaves your browser"
         )
@@ -1081,7 +1072,7 @@ The Simlane Team"""
                     st.session_state.show_email_composer = False
                     st.rerun()
     
-    # Engagement Timeline with consistent colors
+    # Engagement Timeline
     st.subheader("📊 Engagement Timeline")
     
     # Generate sample engagement data
@@ -1103,7 +1094,7 @@ The Simlane Team"""
         y=['virtual_visits', 'in_person_visits'],
         title="Monthly Visit History",
         labels={'value': 'Number of Visits', 'date': 'Month'},
-        color_discrete_map={'virtual_visits': BRAND_COLORS[0], 'in_person_visits': BRAND_COLORS[1]}
+        color_discrete_map={'virtual_visits': '#2563EB', 'in_person_visits': '#7C3AED'}
     )
     
     st.plotly_chart(fig_timeline, use_container_width=True)
@@ -1293,60 +1284,61 @@ def show_churn_predictions(data):
             st.session_state.filter_risk = 'LOW'
             st.rerun()
     
-    # Risk visualization with clickable elements
+    # Risk visualization
     fig_risk, fig_timeline = create_risk_dashboard(data)
-    
-    # Add click event data to risk chart
-    fig_risk.update_traces(
-        customdata=risk_counts.index,
-        hovertemplate='<b>%{x}</b><br>Members: %{y}<br>Click to filter<extra></extra>'
-    )
     
     col1, col2 = st.columns(2)
     with col1:
-        # Clickable risk distribution
-        selected_risk = st.plotly_chart(
-            fig_risk, 
-            use_container_width=True,
-            on_select="rerun",
-            selection_mode="points"
-        )
-        
-        # Handle click events
-        if selected_risk and selected_risk.selection.points:
-            clicked_risk = risk_counts.index[selected_risk.selection.points[0]['point_index']]
-            st.session_state.filter_risk = clicked_risk
-            st.rerun()
-    
+        st.plotly_chart(fig_risk, use_container_width=True)
     with col2:
         st.plotly_chart(fig_timeline, use_container_width=True)
     
-    # High-risk members table with enhanced header
+    # High-risk members table with inline actions
     st.subheader("🎯 High-Priority Members")
     
-    # Clear, actionable subtitle
-    high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
-    immediate_count = len(high_risk_members[high_risk_members['risk_category'] == 'IMMEDIATE'])
-    high_count = len(high_risk_members[high_risk_members['risk_category'] == 'HIGH'])
-    
+    # Always show the SMS alert button area
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.write(f"**{immediate_count} members** projected to churn <30 days, **{high_count} members** at 30-90 days. Filter, email or export below.")
+        st.write("Members at immediate risk - take action now")
     with col2:
-        # Bulk actions button
-        if st.button("📋 Bulk Actions", use_container_width=True, type="primary"):
-            st.session_state.show_bulk_actions = True
+        # Check if SMS is configured in settings
+        if st.button("📱 Send Bulk Alerts", use_container_width=True, type="primary"):
+            if 'sms_alerts_enabled' in st.session_state and st.session_state.sms_alerts_enabled and 'alert_phone' in st.session_state:
+                high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
+                immediate_members = high_risk_members[high_risk_members['risk_category'] == 'IMMEDIATE'].head(5)
+                
+                if len(immediate_members) > 0:
+                    with st.spinner("Sending SMS alerts..."):
+                        success_count = 0
+                        for _, member in immediate_members.iterrows():
+                            success, msg = sms_manager.send_risk_alert(
+                                st.session_state.alert_phone,
+                                member['member_id'],
+                                member['risk_category'],
+                                member['estimated_days_to_churn']
+                            )
+                            if success:
+                                success_count += 1
+                        
+                        if success_count > 0:
+                            st.success(f"✅ Sent {success_count} SMS alerts successfully!")
+                        else:
+                            st.error("Failed to send alerts. Check your Twilio configuration in Settings.")
+                else:
+                    st.warning("No immediate risk members to alert.")
+            else:
+                st.warning("⚠️ Please enable and configure SMS alerts in Settings first.")
+    
+    high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
     
     # Apply filter if one was selected
     if 'filter_risk' in st.session_state and st.session_state.filter_risk:
-        st.info(f"🔍 Filtered to {st.session_state.filter_risk} risk members")
+        st.info(f"🔍 Showing only {st.session_state.filter_risk} risk members. ")
         if st.button("Clear filter"):
             del st.session_state.filter_risk
             st.rerun()
         
-        high_risk_members = data[data['risk_category'] == st.session_state.filter_risk]
-    else:
-        high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
+        high_risk_members = high_risk_members[high_risk_members['risk_category'] == st.session_state.filter_risk]
     
     # Show member count
     st.write(f"Showing {len(high_risk_members)} members")
@@ -1381,19 +1373,35 @@ def show_churn_predictions(data):
         with col7:
             st.write(f"${row['lifetime_value']:,.0f}")
         with col8:
-            # Action buttons - only view details
-            if st.button("↗", key=f"view_{idx}", help="View details", use_container_width=True):
-                st.session_state.selected_member = row['member_id']
-                st.session_state.show_member_details = True
-                st.session_state.current_page = 'Member Details'
-                st.rerun()
+            # Action buttons
+            action_col1, action_col2, action_col3 = st.columns(3)
+            with action_col1:
+                if st.button("✉️", key=f"email_{idx}", help="Email member"):
+                    st.toast(f"📧 Opening email composer for {row['member_id']}...")
+                    # In production, this would open email client or compose window
+                    st.session_state[f'email_action_{idx}'] = True
+            with action_col2:
+                if st.button("↗", key=f"view_{idx}", help="View details"):
+                    st.session_state.selected_member = row['member_id']
+                    st.session_state.show_member_details = True
+                    st.session_state.current_page = 'Member Details'
+                    st.rerun()
+            with action_col3:
+                if st.button("⤓", key=f"download_{idx}", help="Export member data"):
+                    csv = pd.DataFrame([row]).to_csv(index=False)
+                    st.download_button(
+                        label="💾",
+                        data=csv,
+                        file_name=f"member_{row['member_id']}.csv",
+                        mime="text/csv",
+                        key=f"dl_confirm_{idx}"
+                    )
         
         if idx < 19:  # Don't add divider after last row
             st.divider()
     
-    # Download option - moved to sidebar bulk actions
-    st.markdown("---")
-    st.caption("💡 Use the Bulk Actions button above to export data or send communications")
+    # Download option
+    csv = high_risk_members.to_csv(index=False)
     st.download_button(
         label="📥 Download High-Risk Members List",
         data=csv,
@@ -1412,12 +1420,12 @@ def show_customer_segments(data):
     )
     
     # Segment metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
-    segments = ['Premium', 'Standard', 'Emerging', 'New']
-    colors = ['🟢', '🔵', '🟡', '🟣']
+    segments = ['Premium', 'Standard', 'Basic', 'At-Risk', 'New']
+    colors = ['🟢', '🔵', '🟡', '🔴', '🟣']
     
-    for col, segment, color in zip([col1, col2, col3, col4], segments, colors):
+    for col, segment, color in zip([col1, col2, col3, col4, col5], segments, colors):
         with col:
             count = len(data[data['segment'] == segment])
             percentage = (count / len(data)) * 100
@@ -1450,14 +1458,15 @@ def show_customer_segments(data):
     
     segment_stats.columns = ['Members', 'Avg LTV ($)', 'Avg Virtual Visits', 'Avg Tenure (days)', 'Avg Risk Score']
     
-    # Format the dataframe without background gradient
-    formatted_stats = segment_stats.copy()
-    formatted_stats['Avg LTV ($)'] = formatted_stats['Avg LTV ($)'].apply(lambda x: f'${x:,.0f}')
-    formatted_stats['Avg Virtual Visits'] = formatted_stats['Avg Virtual Visits'].apply(lambda x: f'{x:.1f}')
-    formatted_stats['Avg Tenure (days)'] = formatted_stats['Avg Tenure (days)'].apply(lambda x: f'{x:.0f}')
-    formatted_stats['Avg Risk Score'] = formatted_stats['Avg Risk Score'].apply(lambda x: f'{x:.2f}')
-    
-    st.dataframe(formatted_stats, use_container_width=True)
+    st.dataframe(
+        segment_stats.style.format({
+            'Avg LTV ($)': '${:,.0f}',
+            'Avg Virtual Visits': '{:.1f}',
+            'Avg Tenure (days)': '{:.0f}',
+            'Avg Risk Score': '{:.2f}'
+        }).background_gradient(cmap='RdYlGn_r', subset=['Avg Risk Score']),
+        use_container_width=True
+    )
 
 def show_risk_analysis(data):
     """Risk analysis page."""
@@ -1521,9 +1530,9 @@ def show_risk_analysis(data):
     
     st.plotly_chart(fig_group_risk, use_container_width=True)
     
-    # Hazard Analysis Section with clearer intro
+    # Hazard Analysis Section
     st.subheader("📈 Hazard Acceleration Analysis")
-    st.write("**Key insight:** Longer gaps between member visits accelerate churn risk exponentially—see curves below.")
+    st.write("Understanding how different factors impact the acceleration of churn risk over time")
     
     # Generate hazard function data
     days_range = np.linspace(0, 365, 100)
@@ -2044,112 +2053,102 @@ def main():
         create_onboarding_wizard()
         return
     
-    # Main navigation
+    # Main navigation with flattened structure
     with st.sidebar:
         st.markdown(f"""
         <div style="text-align: center; padding: 1rem; margin-bottom: 2rem; 
-                    background: linear-gradient(135deg, #0B3E8E, #0EA5E9); 
+                    background: linear-gradient(135deg, #2563EB, #7C3AED); 
                     border-radius: 10px; color: white;">
             <h3 style="margin: 0;">Welcome back!</h3>
             <p style="margin: 0.5rem 0 0 0;">{st.session_state.user['name']}</p>
         </div>
         """, unsafe_allow_html=True)
         
-        # Navigation menu
-        page = st.radio(
-            "📍 Navigation",
-            options=[
-                "Churn Predictions",
-                "Customer Segments",
-                "Risk Analysis",
-                "Reporting",
-                "Settings"
-            ],
-            index=0  # Default to Churn Predictions
-        )
+        # Navigation menu - flattened structure
+        st.markdown("### 📍 Navigation")
+        
+        # Dashboard
+        if st.button("🏠 Dashboard", use_container_width=True, 
+                    type="primary" if st.session_state.get('current_page') == 'Dashboard' else "secondary"):
+            st.session_state.current_page = 'Dashboard'
+            st.rerun()
+        
+        # Insights section with expandable submenu
+        with st.expander("📊 Insights", expanded=True):
+            insights_options = ["Churn Predictions", "Customer Segments", "Risk Analysis"]
+            for option in insights_options:
+                if st.button(f"{option}", use_container_width=True,
+                            type="primary" if st.session_state.get('current_page') == option else "secondary",
+                            key=f"nav_{option}"):
+                    st.session_state.current_page = option
+                    st.rerun()
+        
+        # Reports
+        if st.button("📈 Reporting", use_container_width=True,
+                    type="primary" if st.session_state.get('current_page') == 'Reporting' else "secondary"):
+            st.session_state.current_page = 'Reporting'
+            st.rerun()
+        
+        # Settings
+        if st.button("⚙️ Settings", use_container_width=True,
+                    type="primary" if st.session_state.get('current_page') == 'Settings' else "secondary"):
+            st.session_state.current_page = 'Settings'
+            st.rerun()
         
         st.markdown("---")
         
-        # Quick stats
+        # Quick stats with better context
         data = load_sample_data()
-        st.markdown("**📊 Quick Stats**")
-        st.metric("Total Members", f"{len(data):,}")
-        st.metric("At Risk", f"{len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]):,}")
-        st.metric("Avg LTV", f"${data['lifetime_value'].mean():.0f}")
+        st.markdown("### 📊 Quick Stats")
+        
+        # Make quick stats clickable
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(f"**{len(data):,}**\nMembers", use_container_width=True,
+                        help="Click to see all members"):
+                st.session_state.current_page = 'Dashboard'
+                st.rerun()
+        
+        with col2:
+            at_risk = len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])])
+            if st.button(f"**{at_risk:,}**\nAt Risk", use_container_width=True,
+                        help="Click to see at-risk members"):
+                st.session_state.current_page = 'Churn Predictions'
+                st.session_state.filter_risk = 'HIGH'
+                st.rerun()
+        
+        avg_ltv = data['lifetime_value'].mean()
+        st.metric("Avg LTV", f"${avg_ltv:.0f}", 
+                 delta=f"+${np.random.randint(50, 200)} MoM",
+                 help="Average lifetime value per member")
         
         st.markdown("---")
-        
-        # Bulk actions drawer (if active)
-        if st.session_state.get('show_bulk_actions', False) and page == "Churn Predictions":
-            st.markdown("### 📋 Bulk Actions")
-            
-            # Get current filtered data
-            if 'filter_risk' in st.session_state and st.session_state.filter_risk:
-                bulk_data = data[data['risk_category'] == st.session_state.filter_risk]
-            else:
-                bulk_data = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]
-            
-            # Summary
-            selected_count = len(bulk_data)
-            total_ltv = bulk_data['lifetime_value'].sum()
-            st.info(f"**{selected_count} members selected**  \nEst. ${total_ltv:,.0f} LTV")
-            
-            # Action type
-            action_type = st.radio(
-                "Choose action:",
-                ["📧 Email Campaign", "📱 SMS Alert", "📥 Export CSV"],
-                label_visibility="collapsed"
-            )
-            
-            if action_type == "📧 Email Campaign":
-                campaign_type = st.selectbox(
-                    "Template:",
-                    ["Risk Alert", "Win-back Offer", "Engagement Campaign"]
-                )
-                if st.button("Send Emails", type="primary", use_container_width=True):
-                    st.success(f"✅ Email campaign queued for {selected_count} members")
-                    st.session_state.show_bulk_actions = False
-                    time.sleep(2)
-                    st.rerun()
-                    
-            elif action_type == "📱 SMS Alert":
-                if st.button("Send SMS Alerts", type="primary", use_container_width=True):
-                    if 'sms_alerts_enabled' in st.session_state and st.session_state.sms_alerts_enabled:
-                        st.success(f"✅ SMS alerts sent to {min(selected_count, 10)} highest-risk members")
-                    else:
-                        st.warning("Please configure SMS in Settings first")
-                    st.session_state.show_bulk_actions = False
-                    time.sleep(2)
-                    st.rerun()
-                    
-            elif action_type == "📥 Export CSV":
-                csv = bulk_data.to_csv(index=False)
-                st.download_button(
-                    label="Download CSV",
-                    data=csv,
-                    file_name=f"high_risk_members_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            
-            if st.button("Close", use_container_width=True):
-                st.session_state.show_bulk_actions = False
-                st.rerun()
-            
-            st.markdown("---")
         
         # Logout button
         if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.username = None
-            st.session_state.user = None
+            for key in ['authenticated', 'username', 'user', 'current_page']:
+                if key in st.session_state:
+                    del st.session_state[key]
             st.rerun()
     
     # Load data
     data = load_sample_data()
     
+    # Initialize current page if not set
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'Dashboard'
+    
+    # Check if we have data or should show empty state (skip for now to avoid breaking)
+    # if 'demo_mode' not in st.session_state and 'data_uploaded' not in st.session_state:
+    #     show_empty_state()
+    #     return
+    
     # Route to appropriate page
-    if page == "Churn Predictions":
+    page = st.session_state.get('current_page', 'Dashboard')
+    
+    if page == "Dashboard":
+        show_dashboard(data)
+    elif page == "Churn Predictions":
         show_churn_predictions(data)
     elif page == "Customer Segments":
         show_customer_segments(data)
@@ -2159,7 +2158,7 @@ def main():
         show_reporting(data)
     elif page == "Settings":
         show_settings()
-    elif 'selected_member' in st.session_state and st.session_state.get('current_page') == 'Member Details':
+    elif page == "Member Details" and 'selected_member' in st.session_state:
         show_member_details(st.session_state.selected_member, data)
     
     # Footer
