@@ -1,4 +1,69 @@
-# ============================================================================
+# Risk metrics - make them clickable
+    col1, col2, col3, col4 = st.columns(4)
+    
+    immediate_risk = len(data[data['risk_category'] == 'IMMEDIATE'])
+    high_risk = len(data[data['risk_category'] == 'HIGH'])
+    medium_risk = len(data[data['risk_category'] == 'MEDIUM'])
+    low_risk = len(data[data['risk_category'] == 'LOW'])
+    
+    # Style for clickable metric cards
+    st.markdown("""
+    <style>
+    div[data-testid="column"] > div > div > div > button {
+        height: 100%;
+        padding: 1.5rem;
+        background: white;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        transition: all 0.2s;
+    }
+    div[data-testid="column"] > div > div > div > button:hover {
+        border-color: #2563EB;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    with col1:
+        if st.button(
+            f"🚨 **Immediate Risk**\n\n{immediate_risk}\n\nNext 30 days",
+            key="immediate_kpi",
+            help="Click to filter immediate risk members",
+            use_container_width=True
+        ):
+            st.session_state.filter_risk = 'IMMEDIATE'
+            st.rerun()
+    
+    with col2:
+        if st.button(
+            f"⚠️ **High Risk**\n\n{high_risk}\n\n30-90 days",
+            key="high_kpi",
+            help="Click to filter high risk members",
+            use_container_width=True
+        ):
+            st.session_state.filter_risk = 'HIGH'
+            st.rerun()
+    
+    with col3:
+        if st.button(
+            f"📊 **Medium Risk**\n\n{medium_risk}\n\n90-180 days",
+            key="medium_kpi",
+            help="Click to filter medium risk members",
+            use_container_width=True
+        ):
+            st.session_state.filter_risk = 'MEDIUM'
+            st.rerun()
+    
+    with col4:
+        if st.button(
+            f"✅ **Low Risk**\n\n{low_risk}\n\n>180 days",
+            key="low_kpi",
+            help="Click to filter low risk members",
+            use_container_width=True
+        ):
+            st.session_state.filter_risk = 'LOW'
+            st.rerun()# ============================================================================
 # SIMLANE.AI ANALYTICS PLATFORM - STREAMLIT APP
 # Complete white-labeled, professional business intelligence platform
 # ============================================================================
@@ -202,12 +267,10 @@ class SMSManager:
         # Try to initialize Twilio client if credentials are available
         if TWILIO_AVAILABLE:
             try:
-                # IMPORTANT: Replace these with your actual Twilio credentials
-                # For production, use environment variables or Streamlit secrets
-                # These are placeholder values - get real ones from your Twilio console
-                account_sid = "ACbbc3fe7ae9923ee89af7b7eabe790f2d"  # Your Account SID from twilio.com/console
-                auth_token = "ff99b41c2c6e9f18a51de3e4a6936f08"  # Your Auth Token from twilio.com/console
-                self.from_number = "+18333653964"  # Your Twilio phone number (must be a valid Twilio number)
+                # Default credentials - REPLACE THESE WITH YOUR ACTUAL VALUES
+                account_sid = "AC..."  # Replace with your Account SID
+                auth_token = "..."     # Replace with your Auth Token
+                self.from_number = "+1..."  # Replace with your Twilio phone number
                 
                 # Check for Twilio credentials in Streamlit secrets (preferred method)
                 if 'twilio' in st.secrets:
@@ -220,11 +283,34 @@ class SMSManager:
                     auth_token = os.environ['TWILIO_AUTH_TOKEN']
                     self.from_number = os.environ.get('TWILIO_FROM_NUMBER', self.from_number)
                 
-                # Initialize the client only if we have real credentials
-                if not account_sid.startswith("AC") or account_sid == "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx":
-                    st.warning("⚠️ Twilio credentials not configured. Please add your Twilio Account SID and Auth Token.")
+                # Check if using test credentials (for development)
+                # Test credentials will simulate SMS without actually sending
+                if account_sid == "ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa":
+                    st.warning("📋 Using Twilio Test Credentials - SMS will be simulated only")
+                    self.test_mode = True
                 else:
-                    self.client = TwilioClient(account_sid, auth_token)
+                    self.test_mode = False
+                
+                # Initialize the client if we have valid credentials
+                if account_sid.startswith("AC") and len(account_sid) == 34 and auth_token != "...":
+                    try:
+                        self.client = TwilioClient(account_sid, auth_token)
+                        # Check if toll-free number
+                        if self.from_number and any(self.from_number.startswith(prefix) for prefix in ['+1833', '+1844', '+1855', '+1866', '+1877', '+1888']):
+                            st.warning("⚠️ You're using a toll-free number. This requires verification for SMS. Consider getting a regular local number for immediate use.")
+                        # Debug info (remove in production)
+                        st.info(f"✅ Twilio initialized with Account SID: {account_sid[:6]}...{account_sid[-4:]}")
+                    except Exception as e:
+                        st.error(f"Twilio initialization error: {str(e)}")
+                else:
+                    st.warning("⚠️ Twilio credentials not properly configured.")
+                    # Debug info (remove in production)
+                    if not account_sid.startswith("AC"):
+                        st.error(f"Account SID should start with 'AC', got: {account_sid[:4]}...")
+                    if len(account_sid) != 34:
+                        st.error(f"Account SID should be 34 characters, got: {len(account_sid)}")
+                    if auth_token == "...":
+                        st.error("Auth token not set")
                 
             except Exception as e:
                 st.error(f"Failed to initialize Twilio: {str(e)}")
@@ -244,6 +330,8 @@ class SMSManager:
                 # Assume US number if no country code
                 to_number = '+1' + to_number.replace('-', '').replace(' ', '').replace('(', '').replace(')', '')
             
+            st.info(f"📞 Sending to: {to_number} from: {self.from_number}")
+            
             message_obj = self.client.messages.create(
                 body=message,
                 from_=self.from_number,
@@ -256,6 +344,17 @@ class SMSManager:
                 return False, f"Invalid phone number format. Please use format: +1234567890"
             elif "From" in error_msg and "is not a Twilio phone number" in error_msg:
                 return False, f"Configuration error: {self.from_number} is not a valid Twilio phone number. Please get a phone number from your Twilio console."
+            elif "30032" in error_msg or "Toll-Free Number Has Not Been Verified" in error_msg:
+                return False, (
+                    "❌ Toll-Free Number Not Verified\n\n"
+                    "Your toll-free number needs verification before sending SMS.\n\n"
+                    "**Quick Fix:** Buy a regular local number instead:\n"
+                    "1. Go to: https://console.twilio.com/phone-numbers/search\n"
+                    "2. Select 'Local' (not Toll-Free)\n"
+                    "3. Ensure 'SMS' is checked\n"
+                    "4. Purchase number (~$1.15/month)\n"
+                    "5. Update your configuration with the new number"
+                )
             else:
                 return False, f"Failed to send SMS: {error_msg}"
     
@@ -266,8 +365,22 @@ class SMSManager:
     
     def send_test_message(self, phone_number):
         """Send a test SMS message."""
-        message = "🎯 Simlane.ai Test Message: Your SMS notifications are working correctly!"
-        return self.send_sms(phone_number, message)
+        # Add timestamp to make message unique (helps with carrier filtering)
+        timestamp = datetime.now().strftime("%I:%M %p")
+        message = f"🎯 Simlane.ai Test [{timestamp}]: Your SMS notifications are working correctly! Reply STOP to unsubscribe."
+        
+        # Log the attempt for debugging
+        st.info(f"📤 Attempting to send SMS to: {phone_number}")
+        
+        success, response = self.send_sms(phone_number, message)
+        
+        if success:
+            # Parse the SID from response
+            sid = response.split("SID: ")[1] if "SID:" in response else "Unknown"
+            st.info(f"📱 Message sent with SID: {sid}")
+            st.info(f"🔍 Check status at: https://console.twilio.com/us1/monitor/logs/messages/{sid}")
+        
+        return success, response
 
 sms_manager = SMSManager()
 
@@ -513,7 +626,7 @@ def show_churn_predictions(data):
         "AI-powered member retention insights and risk analysis"
     )
     
-    # Risk metrics
+    # Risk metrics with clickable KPIs
     col1, col2, col3, col4 = st.columns(4)
     
     immediate_risk = len(data[data['risk_category'] == 'IMMEDIATE'])
@@ -522,36 +635,36 @@ def show_churn_predictions(data):
     low_risk = len(data[data['risk_category'] == 'LOW'])
     
     with col1:
-        st.markdown(create_metric_card(
-            "Immediate Risk", 
-            f"{immediate_risk}", 
-            "Next 30 days",
-            "🚨"
-        ), unsafe_allow_html=True)
+        if st.button(f"🚨 Immediate Risk\n\n**{immediate_risk}**\n\nNext 30 days", 
+                    key="immediate_kpi", 
+                    help="Click to see immediate risk members",
+                    use_container_width=True):
+            st.session_state.filter_risk = 'IMMEDIATE'
+            st.rerun()
     
     with col2:
-        st.markdown(create_metric_card(
-            "High Risk", 
-            f"{high_risk}", 
-            "30-90 days",
-            "⚠️"
-        ), unsafe_allow_html=True)
+        if st.button(f"⚠️ High Risk\n\n**{high_risk}**\n\n30-90 days", 
+                    key="high_kpi",
+                    help="Click to see high risk members", 
+                    use_container_width=True):
+            st.session_state.filter_risk = 'HIGH'
+            st.rerun()
     
     with col3:
-        st.markdown(create_metric_card(
-            "Medium Risk", 
-            f"{medium_risk}", 
-            "90-180 days",
-            "📊"
-        ), unsafe_allow_html=True)
+        if st.button(f"📊 Medium Risk\n\n**{medium_risk}**\n\n90-180 days", 
+                    key="medium_kpi",
+                    help="Click to see medium risk members",
+                    use_container_width=True):
+            st.session_state.filter_risk = 'MEDIUM'
+            st.rerun()
     
     with col4:
-        st.markdown(create_metric_card(
-            "Low Risk", 
-            f"{low_risk}", 
-            ">180 days",
-            "✅"
-        ), unsafe_allow_html=True)
+        if st.button(f"✅ Low Risk\n\n**{low_risk}**\n\n>180 days", 
+                    key="low_kpi",
+                    help="Click to see low risk members",
+                    use_container_width=True):
+            st.session_state.filter_risk = 'LOW'
+            st.rerun()
     
     # Risk visualization
     fig_risk, fig_timeline = create_risk_dashboard(data)
@@ -562,13 +675,13 @@ def show_churn_predictions(data):
     with col2:
         st.plotly_chart(fig_timeline, use_container_width=True)
     
-    # High-risk members table with SMS alert option
+    # High-risk members table with inline actions
     st.subheader("🎯 High-Priority Members")
     
     # Always show the SMS alert button area
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.write("Members at immediate risk")
+        st.write("Members at immediate risk - take action now")
     with col2:
         # Check if SMS is configured in settings
         if st.button("📱 Send Bulk Alerts", use_container_width=True, type="primary"):
@@ -600,14 +713,69 @@ def show_churn_predictions(data):
     
     high_risk_members = data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])].sort_values('estimated_days_to_churn')
     
-    display_columns = ['member_id', 'group_id', 'risk_category', 'estimated_days_to_churn', 
-                      'tenure_days', 'virtual_care_visits', 'lifetime_value']
+    # Apply filter if one was selected
+    if 'filter_risk' in st.session_state and st.session_state.filter_risk:
+        st.info(f"🔍 Showing only {st.session_state.filter_risk} risk members. ")
+        if st.button("Clear filter"):
+            del st.session_state.filter_risk
+            st.rerun()
+        
+        high_risk_members = high_risk_members[high_risk_members['risk_category'] == st.session_state.filter_risk]
     
-    st.dataframe(
-        high_risk_members[display_columns].head(20),
-        use_container_width=True,
-        height=400
-    )
+    # Show member count
+    st.write(f"Showing {len(high_risk_members)} members")
+    
+    # Create header row
+    header_cols = st.columns([1.5, 1, 1.5, 1.5, 1, 1, 1.5, 1.5])
+    headers = ["Member ID", "Group", "Risk", "Days to Churn", "Tenure", "Visits", "Value", "Actions"]
+    for col, header in zip(header_cols, headers):
+        with col:
+            st.markdown(f"**{header}**")
+    
+    st.divider()
+    
+    # Add action buttons for each row
+    for idx, (_, row) in enumerate(high_risk_members.head(20).iterrows()):
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.5, 1, 1.5, 1.5, 1, 1, 1.5, 1.5])
+        
+        with col1:
+            st.write(f"**{row['member_id']}**")
+        with col2:
+            st.write(row['group_id'])
+        with col3:
+            risk_color = RISK_COLORS[row['risk_category']]
+            st.markdown(f"<span style='color: {risk_color}; font-weight: bold;'>{row['risk_category']}</span>", 
+                       unsafe_allow_html=True)
+        with col4:
+            st.write(f"{row['estimated_days_to_churn']} days")
+        with col5:
+            st.write(f"{row['tenure_days']}d")
+        with col6:
+            st.write(str(row['virtual_care_visits']))
+        with col7:
+            st.write(f"${row['lifetime_value']:,.0f}")
+        with col8:
+            # Action buttons
+            action_col1, action_col2, action_col3 = st.columns(3)
+            with action_col1:
+                if st.button("✉️", key=f"email_{idx}", help="Email member"):
+                    st.toast(f"📧 Opening email for {row['member_id']}")
+            with action_col2:
+                if st.button("↗", key=f"view_{idx}", help="View details"):
+                    st.toast(f"📋 Opening details for {row['member_id']}")
+            with action_col3:
+                if st.button("⤓", key=f"download_{idx}", help="Export member data"):
+                    csv = pd.DataFrame([row]).to_csv(index=False)
+                    st.download_button(
+                        label="💾",
+                        data=csv,
+                        file_name=f"member_{row['member_id']}.csv",
+                        mime="text/csv",
+                        key=f"dl_confirm_{idx}"
+                    )
+        
+        if idx < 19:  # Don't add divider after last row
+            st.divider()
     
     # Download option
     csv = high_risk_members.to_csv(index=False)
@@ -685,23 +853,110 @@ def show_settings():
     with tab1:
         st.subheader("📥 Data Upload")
         
+        # Enhanced file uploader with drag area feedback
         uploaded_file = st.file_uploader(
-            "Upload new member data (CSV format)",
-            type=['csv'],
-            help="Upload a CSV file with member data to update the analytics"
+            "Upload new member data",
+            type=['csv', 'xlsx', 'xls'],
+            help="Accepted formats: CSV, Excel (XLSX, XLS). Max 100MB.",
+            accept_multiple_files=False
         )
         
         if uploaded_file is not None:
+            # Show file info
+            file_size = uploaded_file.size / 1024 / 1024  # Convert to MB
+            st.info(f"📄 **File:** {uploaded_file.name} | **Size:** {file_size:.2f} MB | **Type:** {uploaded_file.type}")
+            
             try:
-                new_data = pd.read_csv(uploaded_file)
-                st.success(f"✅ Successfully uploaded {len(new_data)} records")
-                st.dataframe(new_data.head(), use_container_width=True)
+                # Read file based on type
+                if uploaded_file.name.endswith('.csv'):
+                    new_data = pd.read_csv(uploaded_file)
+                else:
+                    new_data = pd.read_excel(uploaded_file)
                 
-                if st.button("🔄 Process Data"):
-                    st.success("✅ Data processed successfully! Dashboard will update automatically.")
+                st.success(f"✅ Successfully loaded {len(new_data):,} rows and {len(new_data.columns)} columns")
+                
+                # Schema mapping interface
+                st.subheader("🔄 Map Your Data Fields")
+                st.write("Map your uploaded columns to the required system fields:")
+                
+                # Define required fields
+                required_fields = {
+                    'member_id': 'Unique member identifier',
+                    'group_id': 'Group/Organization ID',
+                    'enrollment_date': 'Member enrollment date',
+                    'tenure_days': 'Days since enrollment',
+                    'estimated_days_to_churn': 'Predicted days to churn'
+                }
+                
+                optional_fields = {
+                    'virtual_care_visits': 'Number of virtual visits',
+                    'in_person_visits': 'Number of in-person visits',
+                    'lifetime_value': 'Member lifetime value ($)',
+                    'segment': 'Customer segment',
+                    'risk_category': 'Risk classification'
+                }
+                
+                # Create mapping interface
+                col1, col2 = st.columns([1, 2])
+                
+                with col1:
+                    st.markdown("**Your Columns:**")
+                    for col in new_data.columns[:10]:  # Show first 10
+                        st.write(f"• {col}")
+                    if len(new_data.columns) > 10:
+                        st.write(f"... and {len(new_data.columns) - 10} more")
+                
+                with col2:
+                    st.markdown("**Map to System Fields:**")
                     
+                    mappings = {}
+                    
+                    # Required fields
+                    st.markdown("**Required Fields** 🔴")
+                    for field, description in required_fields.items():
+                        mappings[field] = st.selectbox(
+                            f"{field}",
+                            options=['-- Not Mapped --'] + list(new_data.columns),
+                            help=description,
+                            key=f"map_{field}"
+                        )
+                    
+                    # Optional fields
+                    with st.expander("Optional Fields"):
+                        for field, description in optional_fields.items():
+                            mappings[field] = st.selectbox(
+                                f"{field}",
+                                options=['-- Not Mapped --'] + list(new_data.columns),
+                                help=description,
+                                key=f"map_opt_{field}"
+                            )
+                
+                # Validate mapping
+                missing_required = [field for field in required_fields if mappings.get(field) == '-- Not Mapped --']
+                
+                if missing_required:
+                    st.error(f"❌ Missing required fields: {', '.join(missing_required)}")
+                else:
+                    st.markdown("---")
+                    
+                    # Preview mapped data
+                    st.subheader("📋 Data Preview")
+                    preview_data = pd.DataFrame()
+                    for system_field, user_column in mappings.items():
+                        if user_column != '-- Not Mapped --':
+                            preview_data[system_field] = new_data[user_column]
+                    
+                    st.dataframe(preview_data.head(), use_container_width=True)
+                    
+                    if st.button("🚀 Process & Import Data", type="primary", use_container_width=True):
+                        with st.spinner("Processing data..."):
+                            time.sleep(2)  # Simulate processing
+                            st.success("✅ Data imported successfully! Dashboard will update automatically.")
+                            st.balloons()
+                        
             except Exception as e:
                 st.error(f"❌ Error processing file: {str(e)}")
+                st.write("Please ensure your file is properly formatted.")
         
         st.subheader("🗂️ Data Export")
         
@@ -855,17 +1110,63 @@ def show_settings():
             st.selectbox("Export Format", options=['CSV', 'Excel', 'JSON'], index=0)
         
         st.subheader("🎯 Risk Thresholds")
+        st.write("Adjust thresholds to see how many members fall into each category:")
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Create columns for sliders and preview
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.number_input("Immediate Risk (days)", value=30, min_value=1, max_value=60)
+            # Threshold sliders
+            immediate_threshold = st.slider(
+                "Immediate Risk (days)", 
+                min_value=1, 
+                max_value=60, 
+                value=30,
+                help="Members likely to churn within this many days"
+            )
+            high_threshold = st.slider(
+                "High Risk (days)", 
+                min_value=immediate_threshold + 1, 
+                max_value=120, 
+                value=90
+            )
+            medium_threshold = st.slider(
+                "Medium Risk (days)", 
+                min_value=high_threshold + 1, 
+                max_value=365, 
+                value=180
+            )
+        
         with col2:
-            st.number_input("High Risk (days)", value=90, min_value=31, max_value=120)
-        with col3:
-            st.number_input("Medium Risk (days)", value=180, min_value=91, max_value=365)
-        with col4:
-            st.number_input("Low Risk (days)", value=365, min_value=181)
+            # Live impact preview
+            st.markdown("**Impact Preview:**")
+            
+            # Calculate member counts with current thresholds
+            data = load_sample_data()
+            immediate_count = len(data[data['estimated_days_to_churn'] <= immediate_threshold])
+            high_count = len(data[(data['estimated_days_to_churn'] > immediate_threshold) & 
+                                (data['estimated_days_to_churn'] <= high_threshold)])
+            medium_count = len(data[(data['estimated_days_to_churn'] > high_threshold) & 
+                                  (data['estimated_days_to_churn'] <= medium_threshold)])
+            low_count = len(data[data['estimated_days_to_churn'] > medium_threshold])
+            
+            # Display counts with colors
+            st.markdown(f"""
+            <div style="padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+                <div style="margin-bottom: 0.5rem;">
+                    <span style="color: {RISK_COLORS['IMMEDIATE']}; font-weight: bold;">🚨 Immediate:</span> {immediate_count} members
+                </div>
+                <div style="margin-bottom: 0.5rem;">
+                    <span style="color: {RISK_COLORS['HIGH']}; font-weight: bold;">⚠️ High:</span> {high_count} members
+                </div>
+                <div style="margin-bottom: 0.5rem;">
+                    <span style="color: {RISK_COLORS['MEDIUM']}; font-weight: bold;">📊 Medium:</span> {medium_count} members
+                </div>
+                <div>
+                    <span style="color: {RISK_COLORS['LOW']}; font-weight: bold;">✅ Low:</span> {low_count} members
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         if st.button("🔄 Apply Configuration", use_container_width=True):
             st.success("✅ Configuration updated successfully!")
