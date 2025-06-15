@@ -1,6 +1,11 @@
 # ============================================================================
 # SIMLANE.AI ANALYTICS PLATFORM - STREAMLIT APP
 # Complete white-labeled, professional business intelligence platform
+# 
+# Requirements:
+# pip install streamlit pandas numpy plotly bcrypt PyJWT twilio
+# 
+# Note: statsmodels is optional (for trendlines) but not included to reduce dependencies
 # ============================================================================
 
 import streamlit as st
@@ -1033,10 +1038,10 @@ def show_churn_predictions(data):
                     st.session_state[f'email_action_{idx}'] = True
             with action_col2:
                 if st.button("↗", key=f"view_{idx}", help="View details"):
-                    st.toast(f"📋 Loading details for {row['member_id']}...")
-                    # In production, this would navigate to member detail page
-                    st.session_state['selected_member'] = row['member_id']
-                    st.session_state['show_member_details'] = True
+                    st.session_state.selected_member = row['member_id']
+                    st.session_state.show_member_details = True
+                    st.session_state.current_page = 'Member Details'
+                    st.rerun()
             with action_col3:
                 if st.button("⤓", key=f"download_{idx}", help="Export member data"):
                     csv = pd.DataFrame([row]).to_csv(index=False)
@@ -1050,30 +1055,6 @@ def show_churn_predictions(data):
         
         if idx < 19:  # Don't add divider after last row
             st.divider()
-    
-    # Show member details modal if requested
-    if st.session_state.get('show_member_details', False):
-        member_id = st.session_state.get('selected_member')
-        member_data = high_risk_members[high_risk_members['member_id'] == member_id].iloc[0]
-        
-        with st.expander(f"📋 Member Details: {member_id}", expanded=True):
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric("Risk Level", member_data['risk_category'])
-                st.metric("Days to Churn", f"{member_data['estimated_days_to_churn']} days")
-            
-            with col2:
-                st.metric("Tenure", f"{member_data['tenure_days']} days")
-                st.metric("Virtual Visits", member_data['virtual_care_visits'])
-            
-            with col3:
-                st.metric("Lifetime Value", f"${member_data['lifetime_value']:,.0f}")
-                st.metric("Risk Score", f"{member_data['risk_score']:.2f}")
-            
-            if st.button("Close Details"):
-                st.session_state.show_member_details = False
-                st.rerun()
     
     # Download option
     csv = high_risk_members.to_csv(index=False)
@@ -1167,9 +1148,9 @@ def show_risk_analysis(data):
             color='risk_category',
             color_discrete_map=RISK_COLORS,
             title="How does tenure affect churn risk?",
-            labels={'tenure_days': 'Tenure (days)', 'risk_score': 'Risk Score'},
-            trendline="lowess"
+            labels={'tenure_days': 'Tenure (days)', 'risk_score': 'Risk Score'}
         )
+        fig_tenure.update_traces(marker=dict(size=8, opacity=0.7))
         st.plotly_chart(fig_tenure, use_container_width=True)
     
     with col2:
@@ -1181,9 +1162,9 @@ def show_risk_analysis(data):
             color='risk_category',
             color_discrete_map=RISK_COLORS,
             title="How does engagement affect churn risk?",
-            labels={'virtual_care_visits': 'Virtual Care Visits', 'risk_score': 'Risk Score'},
-            trendline="lowess"
+            labels={'virtual_care_visits': 'Virtual Care Visits', 'risk_score': 'Risk Score'}
         )
+        fig_engagement.update_traces(marker=dict(size=8, opacity=0.7))
         st.plotly_chart(fig_engagement, use_container_width=True)
     
     # Risk distribution by group
@@ -1741,6 +1722,8 @@ def main():
         show_reporting(data)
     elif page == "Settings":
         show_settings()
+    elif page == "Member Details" and 'selected_member' in st.session_state:
+        show_member_details(st.session_state.selected_member, data)
     
     # Footer
     st.markdown("---")
