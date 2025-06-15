@@ -52,6 +52,10 @@ st.set_page_config(
 # CONSTANTS AND CONFIGURATION
 # ============================================================================
 
+# Simlane brand colors (based on green logo)
+SIMLANE_GREEN = '#6B9F3F'  # Primary green from logo
+SIMLANE_LIGHT_GREEN = '#C5D9B7'  # Light green from logo background
+
 # Semantic color palette for risk categories
 RISK_COLORS = {
     'IMMEDIATE': '#DC2626',  # Red
@@ -62,7 +66,7 @@ RISK_COLORS = {
 
 # Chart color sequences
 RISK_COLOR_SEQUENCE = ['#DC2626', '#EA580C', '#2563EB', '#16A34A']
-BRAND_COLORS = ['#2563EB', '#7C3AED', '#DB2777', '#DC2626', '#EA580C']
+BRAND_COLORS = ['#6B9F3F', '#8BC34A', '#4CAF50', '#2196F3', '#FF9800']
 
 # ============================================================================
 # CUSTOM STYLING
@@ -158,9 +162,9 @@ st.markdown("""
         }
     }
     
-    /* Onboarding wizard styling */
+    # Onboarding wizard styling with Simlane green
     .onboarding-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: linear-gradient(135deg, #6B9F3F 0%, #8BC34A 100%);
         color: white;
         padding: 3rem;
         border-radius: 16px;
@@ -361,10 +365,15 @@ def login_page():
     with col2:
         st.markdown("""
         <div style="text-align: center; margin-bottom: 2rem;">
-            <h1 style="color: #2563EB; font-size: 3rem; margin-bottom: 0.5rem;">
-                🎯 Simlane.ai
-            </h1>
-            <p style="color: #64748b; font-size: 1.25rem;">
+            <div style="background: #C5D9B7; border-radius: 12px; padding: 2rem; display: inline-block;">
+                <div style="color: #6B9F3F; font-size: 4rem; font-weight: bold;">
+                    ➜➜➜
+                </div>
+                <h1 style="color: #6B9F3F; font-size: 3rem; margin: 0;">
+                    Simlane
+                </h1>
+            </div>
+            <p style="color: #64748b; font-size: 1.25rem; margin-top: 1rem;">
                 Advanced Member Analytics Platform
             </p>
         </div>
@@ -511,9 +520,9 @@ def load_sample_data():
 # ============================================================================
 
 def create_professional_header(title, subtitle):
-    """Create a professional header with improved accessibility."""
+    """Create a professional header with Simlane branding."""
     st.markdown(f"""
-    <div style="background: linear-gradient(135deg, #2563EB 0%, #0EA5E9 100%); 
+    <div style="background: linear-gradient(135deg, #6B9F3F 0%, #8BC34A 100%); 
                 color: white; 
                 padding: 2.5rem 2rem; 
                 border-radius: 12px; 
@@ -672,11 +681,31 @@ def create_onboarding_wizard():
     
     # Step 1: Upload Data
     if st.session_state.onboarding_step == 1:
-        st.header("Step 1: Upload Your Member Data")
-        st.write("Start by uploading your member data file. We support CSV and Excel formats.")
+        st.header("Step 1: Choose Your Data Source")
+        st.write("Start with your own data or explore with our demo dataset.")
+        
+        # Option buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📊 Load Demo Data", type="primary", use_container_width=True,
+                        help="Instantly explore the platform with sample data"):
+                st.session_state.demo_mode = True
+                st.session_state.data_uploaded = True
+                st.session_state.onboarding_step = 3  # Skip to alerts
+                with st.spinner("Loading demo data..."):
+                    time.sleep(1)
+                st.success("✅ Demo data loaded! Skipping to alert configuration.")
+                time.sleep(1)
+                st.rerun()
+        
+        with col2:
+            st.markdown("**or upload your own data**")
+        
+        st.markdown("---")
         
         uploaded_file = st.file_uploader(
-            "Choose a CSV or Excel file",
+            "Upload a CSV or Excel file",
             type=['csv', 'xlsx', 'xls'],
             help="Your data is secure and never leaves your browser"
         )
@@ -2057,7 +2086,7 @@ def main():
     with st.sidebar:
         st.markdown(f"""
         <div style="text-align: center; padding: 1rem; margin-bottom: 2rem; 
-                    background: linear-gradient(135deg, #2563EB, #7C3AED); 
+                    background: linear-gradient(135deg, #6B9F3F, #8BC34A); 
                     border-radius: 10px; color: white;">
             <h3 style="margin: 0;">Welcome back!</h3>
             <p style="margin: 0.5rem 0 0 0;">{st.session_state.user['name']}</p>
