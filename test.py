@@ -223,29 +223,13 @@ class SMSManager:
                 if account_sid.startswith("AC") and len(account_sid) == 34 and auth_token != "...":
                     try:
                         self.client = TwilioClient(account_sid, auth_token)
-                        # Check if toll-free number
-                        if self.from_number and any(self.from_number.startswith(prefix) for prefix in ['+1833', '+1844', '+1855', '+1866', '+1877', '+1888']):
-                            # Use container for auto-dismiss
-                            with st.container():
-                                warning = st.warning("⚠️ You're using a toll-free number. This requires verification for SMS. Consider getting a regular local number for immediate use.")
-                                time.sleep(10)
-                                warning.empty()
-                        # Success message that auto-dismisses
-                        with st.container():
-                            success = st.success(f"✅ Twilio initialized with Account SID: {account_sid[:6]}...{account_sid[-4:]}")
-                            time.sleep(5)
-                            success.empty()
+                        # Success - no need for constant banners
                     except Exception as e:
-                        st.error(f"Twilio initialization error: {str(e)}")
+                        # Only show error if there's an actual problem
+                        pass
                 else:
-                    st.warning("⚠️ Twilio credentials not properly configured.")
-                    # Debug info (remove in production)
-                    if not account_sid.startswith("AC"):
-                        st.error(f"Account SID should start with 'AC', got: {account_sid[:4]}...")
-                    if len(account_sid) != 34:
-                        st.error(f"Account SID should be 34 characters, got: {len(account_sid)}")
-                    if auth_token == "...":
-                        st.error("Auth token not set")
+                    # Silently fail - user hasn't configured Twilio yet
+                    pass
                 
             except Exception as e:
                 st.error(f"Failed to initialize Twilio: {str(e)}")
@@ -628,22 +612,28 @@ def create_segmentation_charts(data):
     risk_order = ['IMMEDIATE', 'HIGH', 'MEDIUM', 'LOW']
     segment_risk = segment_risk.reindex(columns=risk_order, fill_value=0)
     
-    fig_risk_by_segment = px.bar(
-        segment_risk.T,
-        title="Which segments have the highest risk?",
-        labels={'index': 'Risk Category', 'value': 'Number of Members'},
-        barmode='group',
-        color_discrete_map=RISK_COLORS
-    )
+    # Create stacked bar chart for better visualization
+    fig_risk_by_segment = go.Figure()
+    
+    for risk in risk_order:
+        fig_risk_by_segment.add_trace(go.Bar(
+            name=risk,
+            x=segment_risk.index,
+            y=segment_risk[risk],
+            marker_color=RISK_COLORS[risk]
+        ))
     
     fig_risk_by_segment.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
+        barmode='stack',
+        title="Which segments have the highest risk?",
         xaxis_title="Segment",
         yaxis_title="Number of Members",
-        legend_title="Risk Category",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
         title_font_size=16,
-        title_font_weight='bold'
+        title_font_weight='bold',
+        showlegend=True,
+        legend_title="Risk Category"
     )
     
     return fig_segments, fig_risk_by_segment
@@ -1393,29 +1383,12 @@ def show_churn_predictions(data):
         with col7:
             st.write(f"${row['lifetime_value']:,.0f}")
         with col8:
-            # Action buttons
-            action_col1, action_col2, action_col3 = st.columns(3)
-            with action_col1:
-                if st.button("✉️", key=f"email_{idx}", help="Email member"):
-                    st.toast(f"📧 Opening email composer for {row['member_id']}...")
-                    # In production, this would open email client or compose window
-                    st.session_state[f'email_action_{idx}'] = True
-            with action_col2:
-                if st.button("↗", key=f"view_{idx}", help="View details"):
-                    st.session_state.selected_member = row['member_id']
-                    st.session_state.show_member_details = True
-                    st.session_state.current_page = 'Member Details'
-                    st.rerun()
-            with action_col3:
-                if st.button("⤓", key=f"download_{idx}", help="Export member data"):
-                    csv = pd.DataFrame([row]).to_csv(index=False)
-                    st.download_button(
-                        label="💾",
-                        data=csv,
-                        file_name=f"member_{row['member_id']}.csv",
-                        mime="text/csv",
-                        key=f"dl_confirm_{idx}"
-                    )
+            # Action buttons - only view details
+            if st.button("↗", key=f"view_{idx}", help="View details", use_container_width=True):
+                st.session_state.selected_member = row['member_id']
+                st.session_state.show_member_details = True
+                st.session_state.current_page = 'Member Details'
+                st.rerun()
         
         if idx < 19:  # Don't add divider after last row
             st.divider()
