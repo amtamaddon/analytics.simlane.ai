@@ -112,6 +112,9 @@ def generate_demo_data():
                               bins=[0, 0.25, 0.5, 0.75, 1.0],
                               labels=['Low', 'Medium', 'High', 'Immediate'])
     
+    # Convert enrollment_date to datetime if it's not already
+    df['enrollment_date'] = pd.to_datetime(df['enrollment_date'])
+    
     return df
 
 # Login page
@@ -309,6 +312,12 @@ def show_churn_predictions():
     
     df = st.session_state.member_data
     
+    # Ensure risk_level column exists
+    if 'risk_level' not in df.columns:
+        df['risk_level'] = pd.cut(df['risk_score'], 
+                                  bins=[0, 0.25, 0.5, 0.75, 1.0],
+                                  labels=['Low', 'Medium', 'High', 'Immediate'])
+    
     # Risk summary cards
     col1, col2, col3, col4 = st.columns(4)
     
@@ -386,7 +395,341 @@ def show_churn_predictions():
         'Days to Churn': high_risk['estimated_days_to_churn'],
         'Tenure': high_risk['tenure_days'].astype(str) + ' days',
         'Visits': high_risk['virtual_care_visits'] + high_risk['in_person_visits'],
-        'Value': '$' + high_risk['lifetime_value'].round(2).astype(str),
+        'Value': '
+
+def show_customer_segments():
+    st.title("👥 Customer Segments")
+    st.markdown("Deep dive into customer segmentation and behavioral patterns")
+    
+    df = st.session_state.member_data
+    
+    # Segment insights cards
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        st.info("✅ Cluster 3 has the highest average lifetime value at $1,258")
+        st.warning("⚠️ Cluster 0 has the highest churn rate at 32.5%")
+    
+    # Segment visualization
+    st.markdown("### 📊 Member Engagement Patterns")
+    
+    # Create scatter plot
+    fig = px.scatter(
+        df,
+        x='tenure_days',
+        y='virtual_care_visits',
+        color='segment',
+        size='lifetime_value',
+        hover_data=['member_id', 'risk_level'],
+        title="Usage vs Tenure by Segment"
+    )
+    fig.update_layout(height=400)
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Risk distribution by segment
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Risk Distribution")
+        segment_risk = pd.crosstab(df['segment'], df['risk_level'], normalize='index') * 100
+        fig = px.bar(
+            segment_risk.T,
+            barmode='group',
+            title="Risk Levels by Segment (%)"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.markdown("### Churn by Cluster")
+        churn_by_segment = df.groupby('segment')['risk_score'].mean() * 100
+        fig = px.bar(
+            x=churn_by_segment.index,
+            y=churn_by_segment.values,
+            title="Average Churn Risk by Segment",
+            color=churn_by_segment.index
+        )
+        fig.update_layout(showlegend=False, yaxis_title="Churn Rate (%)")
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Segment overview table
+    st.markdown("### 📊 Segment Overview")
+    
+    segment_summary = df.groupby('segment').agg({
+        'member_id': 'count',
+        'tenure_days': 'mean',
+        'virtual_care_visits': 'mean',
+        'lifetime_value': 'mean',
+        'risk_score': 'mean'
+    }).round(2)
+    
+    segment_summary.columns = ['Size', 'Avg. Tenure', 'Avg. Visits', 'Avg. LTV', 'Churn Rate']
+    segment_summary['Avg. LTV'] = '$' + segment_summary['Avg. LTV'].astype(str)
+    segment_summary['Churn Rate'] = (segment_summary['Churn Rate'] * 100).astype(str) + '%'
+    
+    st.dataframe(segment_summary, use_container_width=True)
+
+def show_member_details():
+    st.title("👤 Member Details Drilldown")
+    
+    df = st.session_state.member_data
+    
+    # Member selector
+    selected_member = st.selectbox(
+        "Select a member to view details",
+        df['member_id'].tolist(),
+        index=0
+    )
+    
+    member = df[df['member_id'] == selected_member].iloc[0]
+    
+    # Member profile header
+    st.markdown(f"""
+    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 2rem; border-radius: 12px; color: white; margin-bottom: 2rem;'>
+        <h2>🎯 Member Profile: {selected_member}</h2>
+        <p>Detailed insights and engagement history</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Risk alert
+    if member['risk_level'] in ['Immediate', 'High']:
+        st.error(f"⚠️ High Priority Alert: This member is at {member['risk_level']} risk of churning within {member['estimated_days_to_churn']} days. Immediate action recommended.")
+    
+    # Key metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        st.metric("Risk Level", member['risk_level'], 
+                  f"{member['estimated_days_to_churn']} days to churn")
+    with col2:
+        st.metric("Lifetime Value", f"${member['lifetime_value']:.2f}", "Top 66%")
+    with col3:
+        st.metric("Tenure", f"{member['tenure_days']} days", 
+                  f"Since {member['enrollment_date'].strftime('%b %Y')}")
+    with col4:
+        st.metric("Total Visits", 
+                  member['virtual_care_visits'] + member['in_person_visits'],
+                  f"{member['virtual_care_visits']} virtual, {member['in_person_visits']} in-person")
+    with col5:
+        st.metric("Segment", member['segment'])
+    
+    # Action buttons
+    st.markdown("### 🎯 Actions")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.button("📧 Send Email", use_container_width=True)
+    with col2:
+        st.button("💬 Send SMS", use_container_width=True)
+    with col3:
+        st.button("📝 Add Note", use_container_width=True)
+    with col4:
+        st.button("✅ Create Task", use_container_width=True)
+    
+    # Engagement Timeline
+    st.markdown("### 📈 Engagement Timeline")
+    
+    # Generate sample timeline data
+    dates = pd.date_range(end=datetime.now(), periods=12, freq='M')
+    timeline_data = pd.DataFrame({
+        'date': dates,
+        'virtual_visits': np.random.poisson(2, 12),
+        'in_person_visits': np.random.poisson(1, 12)
+    })
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=timeline_data['date'],
+        y=timeline_data['virtual_visits'],
+        mode='lines+markers',
+        name='Virtual Visits',
+        line=dict(color='#4A7BFF')
+    ))
+    fig.add_trace(go.Scatter(
+        x=timeline_data['date'],
+        y=timeline_data['in_person_visits'],
+        mode='lines+markers',
+        name='In-Person Visits',
+        line=dict(color='#28A745')
+    ))
+    fig.update_layout(
+        title="Monthly Visit History",
+        xaxis_title="Month",
+        yaxis_title="Number of Visits",
+        height=300
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Member Information
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 📋 Member Information")
+        st.markdown(f"""
+        - **Member ID:** {member['member_id']}
+        - **Group:** {member['group_id']}
+        - **Segment:** {member['segment']}
+        - **Enrollment Date:** {member['enrollment_date'].strftime('%B %d, %Y')}
+        - **Risk Score:** {member['risk_score']:.2f}
+        """)
+    
+    with col2:
+        st.markdown("### 📝 Recent Notes")
+        st.info("2024-01-15: Called member about low engagement")
+        st.info("2024-01-10: Sent welcome package")
+        st.info("2024-01-05: New enrollment processed")
+
+def show_executive_reporting():
+    st.title("📊 Executive Reporting")
+    st.markdown("Generate and download comprehensive analytics reports")
+    
+    # Report configuration
+    st.markdown("### 📋 Configure Your Report")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        report_type = st.selectbox(
+            "Report Type",
+            ["Executive Summary", "Detailed Analytics", "Risk Assessment", "Segment Analysis"]
+        )
+        
+        date_range = st.date_input(
+            "Date Range",
+            value=(datetime.now() - timedelta(days=30), datetime.now()),
+            max_value=datetime.now()
+        )
+    
+    with col2:
+        st.markdown("### Include in Report:")
+        include_visuals = st.checkbox("Include Visualizations", value=True)
+        include_recommendations = st.checkbox("Include AI Recommendations", value=True)
+        
+        export_format = st.radio(
+            "Export Format",
+            ["PDF", "Excel", "PowerPoint"],
+            horizontal=True
+        )
+    
+    # Report preview
+    st.markdown("### 📄 Report Preview")
+    
+    with st.container():
+        st.markdown("""
+        <div style='background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);'>
+            <h2>Simlane.ai Member Analytics Report</h2>
+            <p><strong>Report Date:</strong> June 15, 2025</p>
+            
+            <h3>Key Metrics</h3>
+            <ul>
+                <li><strong>Total Members:</strong> 500</li>
+                <li><strong>At-Risk Members:</strong> 210</li>
+                <li><strong>Average Lifetime Value:</strong> $3,494</li>
+                <li><strong>Churn Risk Rate:</strong> 42.0%</li>
+            </ul>
+            
+            <h3>Top Insights</h3>
+            <ol>
+                <li>Immediate Action Required: 109 members at immediate risk</li>
+                <li>Revenue Impact: $730,003 at risk in next 90 days</li>
+                <li>Engagement Crisis: 32 members with zero engagement</li>
+            </ol>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    if st.button("🚀 Generate Full Report", type="primary", use_container_width=True):
+        with st.spinner("Generating report..."):
+            time.sleep(2)
+        st.success("✅ Report generated successfully!")
+        st.download_button(
+            label=f"📥 Download {export_format} Report",
+            data=b"Sample report data",
+            file_name=f"simlane_report_{datetime.now().strftime('%Y%m%d')}.{export_format.lower()}",
+            mime="application/octet-stream"
+        )
+
+def show_settings():
+    st.title("⚙️ Settings & Configuration")
+    st.markdown("System settings, data management, and user preferences")
+    
+    tabs = st.tabs(["📊 Data Management", "👤 User Settings", "🔔 Notification Preferences"])
+    
+    with tabs[0]:
+        st.markdown("### Data Management")
+        
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            with st.spinner("Refreshing data..."):
+                st.session_state.member_data = generate_demo_data()
+                time.sleep(1)
+            st.success("Data refreshed successfully!")
+        
+        if st.button("📥 Import New Data", use_container_width=True):
+            st.info("Upload functionality would go here")
+        
+        if st.button("📤 Export Current Data", use_container_width=True):
+            st.download_button(
+                label="Download CSV",
+                data=st.session_state.member_data.to_csv(index=False),
+                file_name="member_data_export.csv",
+                mime="text/csv"
+            )
+    
+    with tabs[1]:
+        st.markdown("### User Profile")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input("First Name", value="Admin")
+            st.text_input("Email", value="admin@simlane.ai")
+            st.text_input("Phone Number", value="+1 (555) 123-4567")
+        
+        with col2:
+            st.text_input("Last Name", value="User")
+            st.selectbox("Role", ["Admin", "Manager", "Analyst"])
+            st.selectbox("Timezone", ["EST", "CST", "MST", "PST"])
+        
+        if st.button("Save Profile", type="primary"):
+            st.success("Profile updated successfully!")
+    
+    with tabs[2]:
+        st.markdown("### Notification Preferences")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📧 Email Alerts")
+            st.checkbox("Daily Summary", value=True)
+            st.checkbox("High Risk Alerts", value=True)
+            st.checkbox("Weekly Reports", value=False)
+        
+        with col2:
+            st.markdown("#### 💬 SMS Alerts")
+            st.checkbox("Immediate Risk Only", value=True)
+            st.checkbox("Daily Summary", value=False)
+            st.slider("SMS Alert Threshold", 0, 100, 80, help="Only send SMS for members with risk score above this threshold")
+        
+        st.markdown("### 🎯 Risk Thresholds")
+        st.markdown("Adjust thresholds to see how many members fall into each category:")
+        
+        immediate_threshold = st.slider("Immediate Risk (days)", 0, 90, 30)
+        high_threshold = st.slider("High Risk (days)", 30, 180, 90)
+        medium_threshold = st.slider("Medium Risk (days)", 90, 365, 180)
+        
+        if st.button("Apply Configuration", type="primary", use_container_width=True):
+            st.success("Configuration saved successfully!")
+
+# Main app logic
+def main():
+    if not st.session_state.logged_in:
+        show_login()
+    elif not st.session_state.setup_complete and not st.session_state.demo_mode:
+        show_setup_wizard()
+    else:
+        show_dashboard()
+
+if __name__ == "__main__":
+    main()
+ + high_risk['lifetime_value'].round(2).astype(str),
         'Actions': ['View Details'] * len(high_risk)
     })
     
@@ -500,7 +843,7 @@ def show_member_details():
         st.metric("Lifetime Value", f"${member['lifetime_value']:.2f}", "Top 66%")
     with col3:
         st.metric("Tenure", f"{member['tenure_days']} days", 
-                  f"Since {member['enrollment_date'].strftime('%b %Y') if pd.notna(member['enrollment_date']) else 'N/A'}")
+                  f"Since {member['enrollment_date'].strftime('%b %Y')}")
     with col4:
         st.metric("Total Visits", 
                   member['virtual_care_visits'] + member['in_person_visits'],
@@ -564,7 +907,7 @@ def show_member_details():
         - **Member ID:** {member['member_id']}
         - **Group:** {member['group_id']}
         - **Segment:** {member['segment']}
-        - **Enrollment Date:** {member['enrollment_date'].strftime('%B %d, %Y') if pd.notna(member['enrollment_date']) else 'N/A'}
+        - **Enrollment Date:** {member['enrollment_date'].strftime('%B %d, %Y')}
         - **Risk Score:** {member['risk_score']:.2f}
         """)
     
