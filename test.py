@@ -734,6 +734,54 @@ def create_onboarding_wizard():
 # PAGE FUNCTIONS
 # ============================================================================
 
+def show_empty_state():
+    """Show empty state with guided setup wizard."""
+    st.markdown("""
+    <div style="text-align: center; padding: 3rem;">
+        <h1 style="color: #2563EB; font-size: 3rem; margin-bottom: 1rem;">
+            🎯 Welcome to Simlane.ai
+        </h1>
+        <p style="color: #64748b; font-size: 1.25rem; margin-bottom: 2rem;">
+            Let's get started with your member analytics
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col2:
+        if st.button("📊 Load Demo Data", type="primary", use_container_width=True, 
+                    help="Instantly see the platform in action with sample data"):
+            st.session_state.demo_mode = True
+            st.session_state.show_onboarding = False
+            with st.spinner("Loading demo data..."):
+                time.sleep(2)
+            st.success("✅ Demo data loaded successfully!")
+            st.balloons()
+            time.sleep(1)
+            st.rerun()
+        
+        st.markdown("or")
+        
+        if st.button("📤 Upload Your Data", use_container_width=True,
+                    help="Start the guided setup wizard"):
+            st.session_state.show_upload_wizard = True
+            st.rerun()
+
+def create_breadcrumbs(items):
+    """Create breadcrumb navigation."""
+    breadcrumb_html = " › ".join([f"<span style='color: #64748b;'>{item}</span>" for item in items[:-1]])
+    if len(items) > 1:
+        breadcrumb_html += f" › <span style='color: #2563EB; font-weight: 600;'>{items[-1]}</span>"
+    else:
+        breadcrumb_html = f"<span style='color: #2563EB; font-weight: 600;'>{items[0]}</span>"
+    
+    st.markdown(f"""
+    <div style="padding: 0.5rem 0; font-size: 0.875rem;">
+        {breadcrumb_html}
+    </div>
+    """, unsafe_allow_html=True)
+
 def show_dashboard(data):
     """Main dashboard page with contextual quick stats."""
     create_professional_header(
@@ -1673,10 +1721,10 @@ def main():
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'Dashboard'
     
-    # Check if we have data or should show empty state
-    if 'demo_mode' not in st.session_state and 'data_uploaded' not in st.session_state:
-        show_empty_state()
-        return
+    # Check if we have data or should show empty state (skip for now to avoid breaking)
+    # if 'demo_mode' not in st.session_state and 'data_uploaded' not in st.session_state:
+    #     show_empty_state()
+    #     return
     
     # Route to appropriate page
     page = st.session_state.get('current_page', 'Dashboard')
