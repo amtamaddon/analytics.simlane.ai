@@ -63,7 +63,9 @@
             use_container_width=True
         ):
             st.session_state.filter_risk = 'LOW'
-            st.rerun()# ============================================================================
+            st.rerun()
+            
+# ============================================================================
 # SIMLANE.AI ANALYTICS PLATFORM - STREAMLIT APP
 # Complete white-labeled, professional business intelligence platform
 # ============================================================================
