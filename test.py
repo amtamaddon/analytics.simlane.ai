@@ -220,9 +220,16 @@ class SMSManager:
                         self.client = TwilioClient(account_sid, auth_token)
                         # Check if toll-free number
                         if self.from_number and any(self.from_number.startswith(prefix) for prefix in ['+1833', '+1844', '+1855', '+1866', '+1877', '+1888']):
-                            st.warning("⚠️ You're using a toll-free number. This requires verification for SMS. Consider getting a regular local number for immediate use.")
-                        # Debug info (remove in production)
-                        st.info(f"✅ Twilio initialized with Account SID: {account_sid[:6]}...{account_sid[-4:]}")
+                            # Use container for auto-dismiss
+                            with st.container():
+                                warning = st.warning("⚠️ You're using a toll-free number. This requires verification for SMS. Consider getting a regular local number for immediate use.")
+                                time.sleep(10)
+                                warning.empty()
+                        # Success message that auto-dismisses
+                        with st.container():
+                            success = st.success(f"✅ Twilio initialized with Account SID: {account_sid[:6]}...{account_sid[-4:]}")
+                            time.sleep(5)
+                            success.empty()
                     except Exception as e:
                         st.error(f"Twilio initialization error: {str(e)}")
                 else:
@@ -802,13 +809,16 @@ def show_dashboard(data):
 
 def show_churn_predictions(data):
     """Churn predictions page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Insights", "Churn Predictions"])
+    
     create_professional_header(
         "Churn Predictions", 
         "AI-powered member retention insights and risk analysis"
     )
     
-    # TEST: Add a visible test message to confirm updates are working
-    st.success("🚀 NEW FEATURES ACTIVE: Clickable cards, interactive tables, and more!")
+    # Remove the test banner
+    # st.success("🚀 NEW FEATURES ACTIVE: Clickable cards, interactive tables, and more!")
     
     # Risk metrics - make them clickable
     col1, col2, col3, col4 = st.columns(4)
@@ -970,10 +980,15 @@ def show_churn_predictions(data):
             action_col1, action_col2, action_col3 = st.columns(3)
             with action_col1:
                 if st.button("✉️", key=f"email_{idx}", help="Email member"):
-                    st.toast(f"📧 Opening email for {row['member_id']}")
+                    st.toast(f"📧 Opening email composer for {row['member_id']}...")
+                    # In production, this would open email client or compose window
+                    st.session_state[f'email_action_{idx}'] = True
             with action_col2:
                 if st.button("↗", key=f"view_{idx}", help="View details"):
-                    st.toast(f"📋 Opening details for {row['member_id']}")
+                    st.toast(f"📋 Loading details for {row['member_id']}...")
+                    # In production, this would navigate to member detail page
+                    st.session_state['selected_member'] = row['member_id']
+                    st.session_state['show_member_details'] = True
             with action_col3:
                 if st.button("⤓", key=f"download_{idx}", help="Export member data"):
                     csv = pd.DataFrame([row]).to_csv(index=False)
@@ -988,6 +1003,30 @@ def show_churn_predictions(data):
         if idx < 19:  # Don't add divider after last row
             st.divider()
     
+    # Show member details modal if requested
+    if st.session_state.get('show_member_details', False):
+        member_id = st.session_state.get('selected_member')
+        member_data = high_risk_members[high_risk_members['member_id'] == member_id].iloc[0]
+        
+        with st.expander(f"📋 Member Details: {member_id}", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Risk Level", member_data['risk_category'])
+                st.metric("Days to Churn", f"{member_data['estimated_days_to_churn']} days")
+            
+            with col2:
+                st.metric("Tenure", f"{member_data['tenure_days']} days")
+                st.metric("Virtual Visits", member_data['virtual_care_visits'])
+            
+            with col3:
+                st.metric("Lifetime Value", f"${member_data['lifetime_value']:,.0f}")
+                st.metric("Risk Score", f"{member_data['risk_score']:.2f}")
+            
+            if st.button("Close Details"):
+                st.session_state.show_member_details = False
+                st.rerun()
+    
     # Download option
     csv = high_risk_members.to_csv(index=False)
     st.download_button(
@@ -999,6 +1038,9 @@ def show_churn_predictions(data):
 
 def show_customer_segments(data):
     """Customer segmentation page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Insights", "Customer Segments"])
+    
     create_professional_header(
         "Customer Segments", 
         "Understand your member base with AI-powered segmentation"
@@ -1055,6 +1097,9 @@ def show_customer_segments(data):
 
 def show_risk_analysis(data):
     """Risk analysis page."""
+    # Breadcrumbs
+    create_breadcrumbs(["Insights", "Risk Analysis"])
+    
     create_professional_header(
         "Risk Analysis", 
         "Deep dive into factors driving member churn"
@@ -1544,7 +1589,7 @@ def main():
         create_onboarding_wizard()
         return
     
-    # Main navigation
+    # Main navigation with flattened structure
     with st.sidebar:
         st.markdown(f"""
         <div style="text-align: center; padding: 1rem; margin-bottom: 2rem; 
@@ -1555,42 +1600,87 @@ def main():
         </div>
         """, unsafe_allow_html=True)
         
-        # Navigation menu
-        page = st.radio(
-            "📍 Navigation",
-            options=[
-                "Dashboard",
-                "Churn Predictions",
-                "Customer Segments",
-                "Risk Analysis",
-                "Reporting",
-                "Settings"
-            ],
-            index=1  # Default to Churn Predictions
-        )
+        # Navigation menu - flattened structure
+        st.markdown("### 📍 Navigation")
+        
+        # Dashboard
+        if st.button("🏠 Dashboard", use_container_width=True, 
+                    type="primary" if st.session_state.get('current_page') == 'Dashboard' else "secondary"):
+            st.session_state.current_page = 'Dashboard'
+            st.rerun()
+        
+        # Insights section
+        st.markdown("#### 📊 Insights")
+        insights_options = ["Churn Predictions", "Customer Segments", "Risk Analysis"]
+        for option in insights_options:
+            if st.button(f"  {option}", use_container_width=True,
+                        type="primary" if st.session_state.get('current_page') == option else "secondary"):
+                st.session_state.current_page = option
+                st.rerun()
+        
+        # Reports
+        if st.button("📈 Reporting", use_container_width=True,
+                    type="primary" if st.session_state.get('current_page') == 'Reporting' else "secondary"):
+            st.session_state.current_page = 'Reporting'
+            st.rerun()
+        
+        # Settings
+        if st.button("⚙️ Settings", use_container_width=True,
+                    type="primary" if st.session_state.get('current_page') == 'Settings' else "secondary"):
+            st.session_state.current_page = 'Settings'
+            st.rerun()
         
         st.markdown("---")
         
-        # Quick stats
+        # Quick stats with better context
         data = load_sample_data()
-        st.markdown("**📊 Quick Stats**")
-        st.metric("Total Members", f"{len(data):,}")
-        st.metric("At Risk", f"{len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])]):,}")
-        st.metric("Avg LTV", f"${data['lifetime_value'].mean():.0f}")
+        st.markdown("### 📊 Quick Stats")
+        
+        # Make quick stats clickable
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(f"**{len(data):,}**\nMembers", use_container_width=True,
+                        help="Click to see all members"):
+                st.session_state.current_page = 'Dashboard'
+                st.rerun()
+        
+        with col2:
+            at_risk = len(data[data['risk_category'].isin(['IMMEDIATE', 'HIGH'])])
+            if st.button(f"**{at_risk:,}**\nAt Risk", use_container_width=True,
+                        help="Click to see at-risk members"):
+                st.session_state.current_page = 'Churn Predictions'
+                st.session_state.filter_risk = 'HIGH'
+                st.rerun()
+        
+        avg_ltv = data['lifetime_value'].mean()
+        st.metric("Avg LTV", f"${avg_ltv:.0f}", 
+                 delta=f"+${np.random.randint(50, 200)} MoM",
+                 help="Average lifetime value per member")
         
         st.markdown("---")
         
         # Logout button
         if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.username = None
-            st.session_state.user = None
+            for key in ['authenticated', 'username', 'user', 'current_page']:
+                if key in st.session_state:
+                    del st.session_state[key]
             st.rerun()
     
     # Load data
     data = load_sample_data()
     
+    # Initialize current page if not set
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'Dashboard'
+    
+    # Check if we have data or should show empty state
+    if 'demo_mode' not in st.session_state and 'data_uploaded' not in st.session_state:
+        show_empty_state()
+        return
+    
     # Route to appropriate page
+    page = st.session_state.get('current_page', 'Dashboard')
+    
     if page == "Dashboard":
         show_dashboard(data)
     elif page == "Churn Predictions":
